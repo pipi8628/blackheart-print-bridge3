@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:theme="@style/AppTheme"
-        android:label="黑心列印橋"
+        android:label="黑心純列印"
         android:usesCleartextTraffic="true"
         android:allowBackup="false"
         android:supportsRtl="true">
