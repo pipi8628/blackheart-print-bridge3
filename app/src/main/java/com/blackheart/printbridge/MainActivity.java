@@ -239,7 +239,7 @@ public class MainActivity extends Activity {
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(ip, port), 3000);
         OutputStream out = socket.getOutputStream();
-        out.write(data.getBytes("BIG5"));
+        out.write(data.getBytes("US-ASCII"));
         out.flush();
         socket.close();
     }
