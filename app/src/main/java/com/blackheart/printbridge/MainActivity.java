@@ -171,40 +171,34 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private String buildZpl(String text) {
-        String[] rawLines = text.replace("\r", "").split("\n");
-        StringBuilder zpl = new StringBuilder();
+private String buildZpl(String text) {
+    String[] rawLines = text.replace("\r", "").split("\n");
 
-        zpl.append("^XA\r\n");
-        zpl.append("^CI28\r\n");
-        zpl.append("^PW320\r\n");
-        zpl.append("^LL240\r\n");
+    StringBuilder zpl = new StringBuilder();
+    zpl.append("^XA\n");
 
-        int y = 20;
-        int printed = 0;
+    int y = 30;
+    int count = 0;
 
-        for (String line : rawLines) {
-            String safe = sanitizeZplText(line);
-            if (safe.length() == 0) continue;
-            if (printed >= 9) break;
+    for (String line : rawLines) {
+        String safe = sanitizeZplText(line);
+        if (safe.isEmpty()) continue;
 
-            zpl.append("^FO20,")
-               .append(y)
-               .append("^A0N,28,28^FD")
-               .append(safe)
-               .append("^FS\r\n");
+        zpl.append("^FO30,").append(y)
+           .append("^A0N,30,30")
+           .append("^FD").append(safe)
+           .append("^FS\n");
 
-            y += 35;
-            printed++;
-        }
+        y += 40;
+        count++;
 
-        if (printed == 0) {
-            zpl.append("^FO20,20^A0N,28,28^FDEMPTY^FS\r\n");
-        }
-
-        zpl.append("^XZ\r\n");
-        return zpl.toString();
+        if (count >= 10) break;
     }
+
+    zpl.append("^XZ\n");
+
+    return zpl.toString();
+}
 
    private String sanitizeZplText(String s) {
     if (s == null) return "";
