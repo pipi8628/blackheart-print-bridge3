@@ -6,7 +6,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.view.View;
 import android.widget.*;
 import java.io.*;
 import java.net.*;
@@ -46,8 +45,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(17,17,17));
         scroll.addView(root);
 
-        TextView title = tv("🏷️ 黑心地瓜球 列印橋 EZPL", 28, Color.WHITE, true);
-        root.addView(title);
+        root.addView(tv("🏷️ 黑心地瓜球 列印橋 EZPL", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255,209,102), true);
         root.addView(statusText);
@@ -170,7 +168,7 @@ public class MainActivity extends Activity {
                     return;
                 }
 
-                String tspl = job.optString("tspl", "");
+                String ezpl = job.optString("tspl", "");
                 String row = job.optString("row", "");
                 String id = job.optString("id", "");
                 String orderNo = job.optString("orderNo", "");
@@ -178,11 +176,10 @@ public class MainActivity extends Activity {
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
-                    log("TSPL:\\n" + tspl);
+                    log("EZPL:\\n" + ezpl);
                 });
 
-                sendSocket(tspl);
-
+                sendSocket(ezpl);
                 httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
 
                 printedCount++;
@@ -202,59 +199,78 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-   private void testPrint() {
-    saveSettings();
-    new Thread(() -> {
-        try {
-            String ezpl =
-                    "^Q30,2\r\n" +
-                    "^W40\r\n" +
-                    "^H10\r\n" +
-                    "^P2\r\n" +
-                    "^S2\r\n" +
-                    "^AD\r\n" +
-                    "^C1\r\n" +
-                    "^R0\r\n" +
-                    "~Q+0\r\n" +
-                    "^O0\r\n" +
-                    "^D0\r\n" +
-                    "^E12\r\n" +
-                    "AA,20,20,1,1,0,0E,TEST\r\n" +
-                    "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
-                    "E\r\n";
+    private void testPrint() {
+        saveSettings();
+        new Thread(() -> {
+            try {
+                String ezpl =
+                        "^Q30,2\r\n" +
+                        "^W40\r\n" +
+                        "^H10\r\n" +
+                        "^P2\r\n" +
+                        "^S2\r\n" +
+                        "^AD\r\n" +
+                        "^C1\r\n" +
+                        "^R0\r\n" +
+                        "~Q+0\r\n" +
+                        "^O0\r\n" +
+                        "^D0\r\n" +
+                        "^E12\r\n" +
+                        "AA,20,20,1,1,0,0E,TEST\r\n" +
+                        "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
+                        "E\r\n";
 
-            sendSocket(ezpl);
+                sendSocket(ezpl);
+                ui(() -> status("EZPL 測試列印已送出"));
+            } catch (Exception ex) {
+                ui(() -> {
+                    status("測試失敗：" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
 
-            ui(() -> status("EZPL 測試列印已送出"));
-        } catch (Exception ex) {
-            ui(() -> {
-                status("測試失敗：" + ex.getMessage());
-                log(ex.toString());
-            });
+    private void sendSocket(String data) throws Exception {
+        String ip = printerIpInput.getText().toString().trim();
+        int port = Integer.parseInt(portInput.getText().toString().trim());
+
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(ip, port), 3000);
+
+        OutputStream out = socket.getOutputStream();
+        out.write(0x02); // STX 開始，GoDEX LAN 需要
+        out.write(data.getBytes("US-ASCII"));
+        out.write(0x03); // ETX 結束
+        out.flush();
+
+        Thread.sleep(300);
+
+        out.close();
+        socket.close();
+    }
+
+    private String httpGet(String urlText) throws Exception {
+        URL url = new URL(urlText);
+        HttpURLConnection c = (HttpURLConnection) url.openConnection();
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(8000);
+        c.setRequestMethod("GET");
+        c.setInstanceFollowRedirects(true);
+
+        InputStream in = c.getInputStream();
+        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+
+        StringBuilder sb = new StringBuilder();
+        String line;
+
+        while ((line = br.readLine()) != null) {
+            sb.append(line);
         }
-    }).start();
-}
 
-
-   private void sendSocket(String data) throws Exception {
-    String ip = printerIpInput.getText().toString().trim();
-    int port = Integer.parseInt(portInput.getText().toString().trim());
-
-    Socket socket = new Socket();
-    socket.connect(new InetSocketAddress(ip, port), 3000);
-
-    OutputStream out = socket.getOutputStream();
-
-    out.write(0x02); // STX 開始
-    out.write(data.getBytes("US-ASCII"));
-    out.write(0x03); // ETX 結束
-    out.flush();
-
-    Thread.sleep(300);
-
-    out.close();
-    socket.close();
-}
+        br.close();
+        return sb.toString();
+    }
 
     private String cleanUrl(String s) {
         if (s.endsWith("?")) return s.substring(0, s.length()-1);
