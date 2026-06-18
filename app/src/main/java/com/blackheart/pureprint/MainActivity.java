@@ -364,7 +364,7 @@ public class MainActivity extends Activity {
         c.setInstanceFollowRedirects(true);
 
         InputStream in = c.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        BufferedReader br = new BufferedReader(new InputStreamReader(in, "Big5"));
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = br.readLine()) != null) sb.append(line);
@@ -381,7 +381,7 @@ public class MainActivity extends Activity {
     }
 
     private String enc(String s) throws Exception {
-        return URLEncoder.encode(s == null ? "" : s, "UTF-8");
+        return URLEncoder.encode(s == null ? "" : s, "Big5");
     }
 
     private void ui(Runnable r) {
