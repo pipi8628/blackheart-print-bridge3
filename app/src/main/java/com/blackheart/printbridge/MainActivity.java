@@ -154,11 +154,14 @@ public class MainActivity extends Activity {
                 String content = text == null ? "" : text.trim();
                 if (content.length() == 0) content = "EMPTY";
 
-                String ezpl = buildEzpl(content);
+                final String finalContent = content;
+                final String ezpl = buildEzpl(finalContent);
+
                 sendSocket(ezpl);
 
                 ui(() -> status("已送出列印"));
-                ui(() -> log("送出內容:\n" + content + "\n\nEZPL:\n" + ezpl));
+                ui(() -> log("送出內容:\n" + finalContent + "\n\nEZPL:\n" + ezpl));
+
             } catch (Exception ex) {
                 ui(() -> {
                     status("列印失敗：" + ex.getMessage());
