@@ -232,24 +232,26 @@ public class MainActivity extends Activity {
     }
 
     private void sendSocket(String data) throws Exception {
-        String ip = printerIpInput.getText().toString().trim();
-        int port = Integer.parseInt(portInput.getText().toString().trim());
+    String ip = printerIpInput.getText().toString().trim();
+    int port = Integer.parseInt(portInput.getText().toString().trim());
 
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 3000);
+    Socket socket = new Socket();
+    socket.connect(new InetSocketAddress(ip, port), 3000);
 
-        OutputStream out = socket.getOutputStream();
-        out.write(0x02); // STX 開始，GoDEX LAN 需要
-        out.write(data.getBytes("US-ASCII"));
-        out.write(0x03); // ETX 結束
-        out.flush();
+    OutputStream out = socket.getOutputStream();
 
-        Thread.sleep(300);
+    out.write(0x02); // STX
+    out.write("\r\n".getBytes("US-ASCII"));
+    out.write(data.getBytes("US-ASCII"));
+    out.write("\r\n".getBytes("US-ASCII"));
+    out.write(0x03); // ETX
+    out.flush();
 
-        out.close();
-        socket.close();
-    }
+    Thread.sleep(500);
 
+    out.close();
+    socket.close();
+}
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
