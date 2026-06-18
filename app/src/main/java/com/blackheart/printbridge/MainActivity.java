@@ -210,7 +210,7 @@ public class MainActivity extends Activity {
                     "^Q30,2\r\n" +
                     "^W40\r\n" +
                     "^H10\r\n" +
-                    "^P1\r\n" +
+                    "^P2\r\n" +
                     "^S2\r\n" +
                     "^AD\r\n" +
                     "^C1\r\n" +
