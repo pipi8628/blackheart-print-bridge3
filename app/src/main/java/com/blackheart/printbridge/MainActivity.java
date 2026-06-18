@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
         root.setPadding(18, 18, 18, 18);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
 
-        TextView title = tv("黑心地瓜球 POS WebView 自動列印版 GoDEX CMD", 24, Color.WHITE, true);
+        TextView title = tv("黑心地瓜球 POS WebView 自動列印版 ZPL", 24, Color.WHITE, true);
         root.addView(title);
 
         statusText = tv("等待操作", 18, Color.rgb(255, 209, 102), true);
@@ -86,7 +86,7 @@ public class MainActivity extends Activity {
         loadBtn.setOnClickListener(v -> loadPosPage());
         testBtn.setOnClickListener(v -> {
             saveSettings();
-            testPrint();
+            printText("TEST\nBLACKHEART\nZPL OK");
         });
     }
 
@@ -147,22 +147,6 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void testPrint() {
-        new Thread(() -> {
-            try {
-                String cmd = buildGoDexCommand("TEST\nBLACKHEART");
-                sendSocket(cmd);
-                ui(() -> status("新版 GoDEX 指令測試已送出"));
-                ui(() -> log("測試指令:\n" + cmd));
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
-    }
-
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
@@ -171,12 +155,13 @@ public class MainActivity extends Activity {
                 if (content.length() == 0) content = "EMPTY";
 
                 final String finalContent = content;
-                final String cmd = buildGoDexCommand(finalContent);
+                final String zpl = buildZpl(finalContent);
 
-                sendSocket(cmd);
+                sendSocket(zpl);
 
-                ui(() -> status("已送出列印"));
-                ui(() -> log("送出內容:\n" + finalContent + "\n\nCMD:\n" + cmd));
+                ui(() -> status("ZPL 已送出列印"));
+                ui(() -> log("送出內容:\n" + finalContent + "\n\nZPL:\n" + zpl));
+
             } catch (Exception ex) {
                 ui(() -> {
                     status("列印失敗：" + ex.getMessage());
@@ -186,42 +171,45 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private String buildGoDexCommand(String text) {
+    private String buildZpl(String text) {
         String[] rawLines = text.replace("\r", "").split("\n");
-        StringBuilder body = new StringBuilder();
+        StringBuilder zpl = new StringBuilder();
+
+        zpl.append("^XA\r\n");
+        zpl.append("^CI28\r\n");
+        zpl.append("^PW320\r\n");
+        zpl.append("^LL240\r\n");
 
         int y = 20;
         int printed = 0;
 
         for (String line : rawLines) {
-            String safe = sanitizePrinterText(line);
+            String safe = sanitizeZplText(line);
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            body.append("TEXT 20,")
-                    .append(y)
-                    .append(",\"4\",0,1,1,\"")
-                    .append(safe)
-                    .append("\"\r\n");
+            zpl.append("^FO20,")
+               .append(y)
+               .append("^A0N,28,28^FD")
+               .append(safe)
+               .append("^FS\r\n");
 
-            y += 40;
+            y += 35;
             printed++;
         }
 
         if (printed == 0) {
-            body.append("TEXT 20,20,\"4\",0,1,1,\"EMPTY\"\r\n");
+            zpl.append("^FO20,20^A0N,28,28^FDEMPTY^FS\r\n");
         }
 
-        return "^XSET,ROTATION,0\r\n" +
-                "^L\r\n" +
-                body.toString() +
-                "PRINT\r\n";
+        zpl.append("^XZ\r\n");
+        return zpl.toString();
     }
 
-    private String sanitizePrinterText(String s) {
+    private String sanitizeZplText(String s) {
         if (s == null) return "";
-        return s.replace("\"", "'")
-                .replace("\\", "/")
+        return s.replace("^", "")
+                .replace("~", "")
                 .replace("\t", " ")
                 .trim();
     }
@@ -234,7 +222,7 @@ public class MainActivity extends Activity {
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
         OutputStream out = socket.getOutputStream();
-        out.write(data.getBytes(Charset.forName("Big5")));
+        out.write(data.getBytes(Charset.forName("UTF-8")));
         out.flush();
 
         Thread.sleep(500);
