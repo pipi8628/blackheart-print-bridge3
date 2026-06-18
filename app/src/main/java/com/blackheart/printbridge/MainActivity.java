@@ -6,58 +6,56 @@ import android.os.Handler;
 import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.widget.*;
-import java.io.*;
-import java.net.*;
-import org.json.JSONObject;
+import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.nio.charset.Charset;
 
 public class MainActivity extends Activity {
+
     private EditText webAppUrlInput, printerIpInput, portInput;
-    private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn;
-    private Handler handler = new Handler(Looper.getMainLooper());
-    private boolean running = false;
-    private boolean working = false;
-    private int printedCount = 0;
+    private TextView statusText, logText;
+    private Button loadBtn, testBtn;
+    private WebView webView;
     private SharedPreferences prefs;
+    private final Handler handler = new Handler(Looper.getMainLooper());
 
-    private final Runnable poller = new Runnable() {
-        @Override public void run() {
-            if (running) {
-                pollOnce();
-                handler.postDelayed(this, 2000);
-            }
-        }
-    };
-
-    @Override public void onCreate(Bundle b) {
+    @Override
+    protected void onCreate(Bundle b) {
         super.onCreate(b);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
+        setupWebView();
         loadSettings();
     }
 
     private void buildUi() {
-        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 24, 24, 24);
-        root.setBackgroundColor(Color.rgb(17,17,17));
-        scroll.addView(root);
+        root.setPadding(18, 18, 18, 18);
+        root.setBackgroundColor(Color.rgb(17, 17, 17));
 
-        root.addView(tv("黑心地瓜球 列印橋 EZPL Final", 26, Color.WHITE, true));
+        TextView title = tv("黑心地瓜球 POS WebView 自動列印版", 24, Color.WHITE, true);
+        root.addView(title);
 
-        statusText = tv("尚未啟動", 20, Color.rgb(255,209,102), true);
+        statusText = tv("等待操作", 18, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
 
-        countText = tv("已列印：0", 32, Color.WHITE, true);
-        root.addView(countText);
-
-        root.addView(label("Web App 網址"));
+        root.addView(label("Web App / POS 網址"));
         webAppUrlInput = input("https://script.google.com/.../exec");
         root.addView(webAppUrlInput);
 
-        root.addView(label("GoDEX IP"));
+        root.addView(label("GoDEX / Gprinter IP"));
         printerIpInput = input("192.168.31.189");
         root.addView(printerIpInput);
 
@@ -65,172 +63,165 @@ public class MainActivity extends Activity {
         portInput = input("9100");
         root.addView(portInput);
 
-        startBtn = btn("開始監聽", Color.rgb(6,214,160));
-        stopBtn = btn("停止監聽", Color.rgb(239,71,111));
-        testBtn = btn("測試列印", Color.rgb(142,202,230));
-
-        root.addView(startBtn);
-        root.addView(stopBtn);
+        loadBtn = btn("載入 POS 網頁", Color.rgb(6, 214, 160));
+        testBtn = btn("測試列印", Color.rgb(142, 202, 230));
+        root.addView(loadBtn);
         root.addView(testBtn);
 
-        logText = tv("Log", 14, Color.WHITE, false);
-        logText.setBackgroundColor(Color.rgb(43,43,43));
-        logText.setPadding(16,16,16,16);
+        logText = tv("Log", 13, Color.WHITE, false);
+        logText.setBackgroundColor(Color.rgb(43, 43, 43));
+        logText.setPadding(12, 12, 12, 12);
         root.addView(logText);
 
-        startBtn.setOnClickListener(v -> start());
-        stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> testPrint());
+        webView = new WebView(this);
+        LinearLayout.LayoutParams webParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1
+        );
+        root.addView(webView, webParams);
 
-        setContentView(scroll);
+        setContentView(root);
+
+        loadBtn.setOnClickListener(v -> loadPosPage());
+        testBtn.setOnClickListener(v -> {
+            saveSettings();
+            printText("測試列印\nBLACKHEART");
+        });
     }
 
-    private TextView tv(String text, int sp, int color, boolean bold) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(sp);
-        v.setTextColor(color);
-        v.setPadding(0, 10, 0, 10);
-        if (bold) v.setTypeface(null, android.graphics.Typeface.BOLD);
-        return v;
-    }
+    private void setupWebView() {
+        WebSettings s = webView.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
 
-    private TextView label(String text) {
-        return tv(text, 18, Color.rgb(255,209,102), true);
-    }
-
-    private EditText input(String hint) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setSingleLine(false);
-        e.setMinLines(1);
-        e.setTextColor(Color.BLACK);
-        e.setTextSize(18);
-        e.setBackgroundColor(Color.WHITE);
-        e.setPadding(16,12,16,12);
-        return e;
-    }
-
-    private Button btn(String text, int bg) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(20);
-        b.setTextColor(Color.BLACK);
-        b.setBackgroundColor(bg);
-        return b;
+        webView.setWebViewClient(new WebViewClient());
+        webView.addJavascriptInterface(new AndroidPrinter(), "AndroidPrinter");
     }
 
     private void loadSettings() {
         webAppUrlInput.setText(prefs.getString("webAppUrl", ""));
         printerIpInput.setText(prefs.getString("printerIp", "192.168.31.189"));
         portInput.setText(prefs.getString("port", "9100"));
+
+        String url = webAppUrlInput.getText().toString().trim();
+        if (url.startsWith("http")) {
+            webView.loadUrl(url);
+            status("已自動載入 POS 網頁");
+        }
     }
 
     private void saveSettings() {
         prefs.edit()
-            .putString("webAppUrl", webAppUrlInput.getText().toString().trim())
-            .putString("printerIp", printerIpInput.getText().toString().trim())
-            .putString("port", portInput.getText().toString().trim())
-            .apply();
+                .putString("webAppUrl", webAppUrlInput.getText().toString().trim())
+                .putString("printerIp", printerIpInput.getText().toString().trim())
+                .putString("port", portInput.getText().toString().trim())
+                .apply();
     }
 
-    private void start() {
+    private void loadPosPage() {
         saveSettings();
-        running = true;
-        status("監聽中...");
-        handler.removeCallbacks(poller);
-        handler.post(poller);
+        String url = webAppUrlInput.getText().toString().trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            status("網址要以 http:// 或 https:// 開頭");
+            return;
+        }
+        webView.loadUrl(url);
+        status("已載入 POS 網頁");
     }
 
-    private void stop() {
-        running = false;
-        handler.removeCallbacks(poller);
-        status("已停止");
+    public class AndroidPrinter {
+        @JavascriptInterface
+        public void printText(String text) {
+            MainActivity.this.printText(text);
+        }
+
+        @JavascriptInterface
+        public void printOrder(String text) {
+            MainActivity.this.printText(text);
+        }
     }
 
-    private void pollOnce() {
-        if (working) return;
-        working = true;
-
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
-
-                String json = httpGet(base + "?api=pending");
-                JSONObject job = new JSONObject(json);
-
-                if (!job.optBoolean("ok", false)) {
-                    ui(() -> {
-                        status("監聽中｜沒有待列印貼紙");
-                        working = false;
-                    });
-                    return;
-                }
-
-                String ezpl = job.optString("tspl", "");
-                String row = job.optString("row", "");
-                String id = job.optString("id", "");
-                String orderNo = job.optString("orderNo", "");
-                String labelNo = job.optString("labelNo", "");
-
-                ui(() -> {
-                    status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
-                    log("EZPL:\\n" + ezpl);
-                });
-
-                sendSocket(ezpl);
-
-                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-
-                printedCount++;
-                ui(() -> {
-                    countText.setText("已列印：" + printedCount);
-                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張");
-                    working = false;
-                });
-
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("錯誤：" + ex.getMessage());
-                    log(ex.toString());
-                    working = false;
-                });
-            }
-        }).start();
-    }
-
-    private void testPrint() {
+    private void printText(String text) {
         saveSettings();
         new Thread(() -> {
             try {
-                String ezpl =
-                        "^Q30,2\r\n" +
-                        "^W40\r\n" +
-                        "^H10\r\n" +
-                        "^P1\r\n" +
-                        "^S2\r\n" +
-                        "^AD\r\n" +
-                        "^C1\r\n" +
-                        "^R0\r\n" +
-                        "~Q+0\r\n" +
-                        "^O0\r\n" +
-                        "^D0\r\n" +
-                        "^E12\r\n" +
-                        "AA,20,20,1,1,0,0E,TEST\r\n" +
-                        "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
-                        "E\r\n" +
-                        "~S,FEED\r\n";
+                String content = text == null ? "" : text.trim();
+                if (content.length() == 0) content = "EMPTY";
 
+                String ezpl = buildEzpl(content);
                 sendSocket(ezpl);
-                ui(() -> status("EZPL Final 測試列印已送出"));
+
+                ui(() -> status("已送出列印"));
+                ui(() -> log("送出內容:\n" + content + "\n\nEZPL:\n" + ezpl));
             } catch (Exception ex) {
                 ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
+                    status("列印失敗：" + ex.getMessage());
                     log(ex.toString());
                 });
             }
         }).start();
+    }
+
+    private String buildEzpl(String text) {
+        String[] rawLines = text.replace("\r", "").split("\n");
+        StringBuilder body = new StringBuilder();
+
+        int y = 20;
+        int printed = 0;
+
+        for (String line : rawLines) {
+            String safe = sanitizeEzplText(line);
+            if (safe.length() == 0) continue;
+
+            while (safe.length() > 16) {
+                String part = safe.substring(0, 16);
+                body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(part).append("\"\r\n");
+                y += 42;
+                printed++;
+                safe = safe.substring(16);
+                if (printed >= 9) break;
+            }
+
+            if (printed >= 9) break;
+
+            body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(safe).append("\"\r\n");
+            y += 42;
+            printed++;
+            if (printed >= 9) break;
+        }
+
+        if (printed == 0) {
+            body.append("AA,20,20,1,1,0,0E,\"EMPTY\"\r\n");
+        }
+
+        return "^Q30,2\r\n" +
+                "^W40\r\n" +
+                "^H10\r\n" +
+                "^P1\r\n" +
+                "^S2\r\n" +
+                "^AD\r\n" +
+                "^C1\r\n" +
+                "^R0\r\n" +
+                "~Q+0\r\n" +
+                "^O0\r\n" +
+                "^D0\r\n" +
+                "^E12\r\n" +
+                body.toString() +
+                "E\r\n";
+    }
+
+    private String sanitizeEzplText(String s) {
+        if (s == null) return "";
+        return s.replace("\"", "'")
+                .replace("\\", "/")
+                .replace("\t", " ")
+                .trim();
     }
 
     private void sendSocket(String data) throws Exception {
@@ -241,47 +232,46 @@ public class MainActivity extends Activity {
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
         OutputStream out = socket.getOutputStream();
-
-        out.write(0x02);
-        out.write(data.getBytes("US-ASCII"));
+        out.write(data.getBytes(Charset.forName("Big5")));
         out.flush();
 
-        Thread.sleep(800);
-
+        Thread.sleep(500);
         out.close();
         socket.close();
     }
 
-    private String httpGet(String urlText) throws Exception {
-        URL url = new URL(urlText);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
-        c.setRequestMethod("GET");
-        c.setInstanceFollowRedirects(true);
-
-        InputStream in = c.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-
-        StringBuilder sb = new StringBuilder();
-        String line;
-
-        while ((line = br.readLine()) != null) {
-            sb.append(line);
-        }
-
-        br.close();
-        return sb.toString();
+    private TextView tv(String text, int sp, int color, boolean bold) {
+        TextView v = new TextView(this);
+        v.setText(text);
+        v.setTextSize(sp);
+        v.setTextColor(color);
+        v.setPadding(0, 8, 0, 8);
+        if (bold) v.setTypeface(null, android.graphics.Typeface.BOLD);
+        return v;
     }
 
-    private String cleanUrl(String s) {
-        if (s.endsWith("?")) return s.substring(0, s.length()-1);
-        if (s.endsWith("&")) return s.substring(0, s.length()-1);
-        return s;
+    private TextView label(String text) {
+        return tv(text, 16, Color.rgb(255, 209, 102), true);
     }
 
-    private String enc(String s) throws Exception {
-        return URLEncoder.encode(s, "UTF-8");
+    private EditText input(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setSingleLine(true);
+        e.setTextColor(Color.BLACK);
+        e.setTextSize(16);
+        e.setBackgroundColor(Color.WHITE);
+        e.setPadding(12, 8, 12, 8);
+        return e;
+    }
+
+    private Button btn(String text, int bg) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(18);
+        b.setTextColor(Color.BLACK);
+        b.setBackgroundColor(bg);
+        return b;
     }
 
     private void ui(Runnable r) {
@@ -294,6 +284,6 @@ public class MainActivity extends Activity {
     }
 
     private void log(String s) {
-        logText.setText(s + "\\n\\n" + logText.getText().toString());
+        logText.setText(s + "\n\n" + logText.getText().toString());
     }
 }
