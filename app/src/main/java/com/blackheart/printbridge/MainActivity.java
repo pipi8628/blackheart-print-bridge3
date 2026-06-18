@@ -148,28 +148,31 @@ public class MainActivity extends Activity {
     }
 
     private void printText(String text) {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String content = text == null ? "" : text.trim();
-                if (content.length() == 0) content = "EMPTY";
+    saveSettings();
 
-                final String finalContent = content;
-                final String zpl = buildZpl(finalContent);
+    new Thread(() -> {
+        try {
+            String content = text == null ? "" : text.trim();
+            if (content.length() == 0) content = "TEST";
 
-                sendSocket(zpl);
+            final String finalContent = content;
+            final String zpl = buildZpl(finalContent);
 
-                ui(() -> status("ZPL 已送出列印"));
-                ui(() -> log("送出內容:\n" + finalContent + "\n\nZPL:\n" + zpl));
+            sendSocket(zpl);
 
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("列印失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
-    }
+            ui(() -> {
+                status("列印成功");
+                log("送出內容:\n" + finalContent + "\n\nZPL:\n" + zpl);
+            });
+
+        } catch (Exception ex) {
+            ui(() -> {
+                status("列印失敗：" + ex.getMessage());
+                log(ex.toString());
+            });
+        }
+    }).start();
+}
 
 private String buildZpl(String text) {
     String[] rawLines = text.replace("\r", "").split("\n");
