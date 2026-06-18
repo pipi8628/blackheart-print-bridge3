@@ -268,13 +268,12 @@ public class MainActivity extends Activity {
         String[] rawLines = text.replace("\r", "").split("\n");
         StringBuilder zpl = new StringBuilder();
 
-        // GoDEX EZPL + VF中文字型
+        // GoDEX DX2 EZPL：使用 T 指令 + E 結尾，較適合 DX 系列
         zpl.append("^Q50,3\n");
         zpl.append("^W100\n");
         zpl.append("^H10\n");
         zpl.append("^P1\n");
         zpl.append("^S2\n");
-        zpl.append("^AD\n");
 
         int y = 20;
         int printed = 0;
@@ -284,9 +283,7 @@ public class MainActivity extends Activity {
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            zpl.append("TEXT 20,")
-                    .append(y)
-                    .append(",\"VF\",0,1,1,\"")
+            zpl.append("T 20,").append(y).append(",AZ1,1,1,\"")
                     .append(safe)
                     .append("\"\n");
 
@@ -294,7 +291,7 @@ public class MainActivity extends Activity {
             printed++;
         }
 
-        zpl.append("PRINT\n");
+        zpl.append("E\n");
         return zpl.toString();
     }
 
