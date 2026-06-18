@@ -7,20 +7,33 @@ import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.view.ViewGroup;
 import android.widget.*;
-import java.io.*;
-import java.net.*;
+
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.nio.charset.Charset;
+
 public class MainActivity extends Activity {
+
     private EditText webAppUrlInput, printerIpInput, portInput;
     private TextView statusText, countText, logText;
     private Button startBtn, stopBtn, testBtn;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private SharedPreferences prefs;
+
     private boolean running = false;
     private boolean working = false;
     private int printedCount = 0;
-    private SharedPreferences prefs;
 
     private final Runnable poller = new Runnable() {
         @Override public void run() {
@@ -31,8 +44,9 @@ public class MainActivity extends Activity {
         }
     };
 
-    @Override public void onCreate(Bundle b) {
-        super.onCreate(b);
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
         loadSettings();
@@ -44,14 +58,17 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(24, 24, 24, 24);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
-        scroll.addView(root);
+        scroll.addView(root, new ScrollView.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
 
-        root.addView(tv("🏷️ 黑心純列印 V3.9 GZPL", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 V4.0 ZPL 中文字型版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
 
-        countText = tv("已列印：0", 32, Color.WHITE, true);
+        countText = tv("已列印：0", 34, Color.rgb(190, 220, 255), true);
         root.addView(countText);
 
         root.addView(label("Apps Script Web App 網址"));
@@ -68,20 +85,24 @@ public class MainActivity extends Activity {
 
         startBtn = btn("▶️ 開始監聽", Color.rgb(6, 214, 160));
         stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
-        testBtn = btn("🧪 測試列印", Color.rgb(30, 144, 255));
+        testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
 
         root.addView(startBtn);
         root.addView(stopBtn);
         root.addView(testBtn);
 
-        logText = tv("Log", 14, Color.WHITE, false);
+        root.addView(label("Log"));
+        logText = tv("", 14, Color.WHITE, false);
         logText.setBackgroundColor(Color.rgb(43, 43, 43));
         logText.setPadding(16, 16, 16, 16);
-        root.addView(logText);
+        root.addView(logText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> testPrint());
+        testBtn.setOnClickListener(v -> printText("TEST\nBLACKHEART"));
 
         setContentView(scroll);
     }
@@ -91,7 +112,7 @@ public class MainActivity extends Activity {
         v.setText(text);
         v.setTextSize(sp);
         v.setTextColor(color);
-        v.setPadding(0, 10, 0, 10);
+        v.setPadding(0, 8, 0, 8);
         if (bold) v.setTypeface(null, Typeface.BOLD);
         return v;
     }
@@ -173,27 +194,32 @@ public class MainActivity extends Activity {
                 String id = job.optString("id", "");
                 String orderNo = job.optString("orderNo", "");
                 String labelNo = job.optString("labelNo", "");
-                String labelText = job.optString("labelText", "");
 
-                // 相容舊版 API：如果後端只回 tspl/ezpl，就直接轉成文字印出；若有 labelText，優先用 labelText。
+                String labelText = firstNonEmpty(
+                        job.optString("labelText", ""),
+                        job.optString("text", ""),
+                        job.optString("content", ""),
+                        job.optString("plain", "")
+                );
+
                 if (labelText.length() == 0) {
-                    labelText = job.optString("text", "");
-                }
-                if (labelText.length() == 0) {
-                    labelText = job.optString("tspl", "TEST");
+                    String old = firstNonEmpty(job.optString("zpl", ""), job.optString("tspl", ""), job.optString("ezpl", ""));
+                    labelText = extractReadableText(old);
                 }
 
-                final String finalLabelText = labelText;
-                final String zpl = buildZpl(finalLabelText);
+                final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
+                final String zpl = buildZpl(finalText);
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
-                    log("ZPL:\n" + zpl);
+                    log("送出內容:\n" + zpl);
                 });
 
                 sendSocket(zpl);
 
-                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                if (row.length() > 0 || id.length() > 0) {
+                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                }
 
                 printedCount++;
                 ui(() -> {
@@ -212,25 +238,24 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void testPrint() {
-        saveSettings();
-        printText("TEST\nBLACKHEART");
-    }
-
     private void printText(String text) {
+        saveSettings();
         new Thread(() -> {
             try {
                 String content = text == null ? "" : text.trim();
                 if (content.length() == 0) content = "TEST";
 
-                final String zpl = buildZpl(content);
+                final String finalContent = content;
+                final String zpl = buildZpl(finalContent);
 
                 ui(() -> {
-                    status("測試列印已送出");
+                    status("列印中...");
                     log("送出內容:\n" + zpl);
                 });
 
                 sendSocket(zpl);
+
+                ui(() -> status("測試列印已送出"));
 
             } catch (Exception ex) {
                 ui(() -> {
@@ -241,33 +266,37 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    // GZPL / ZPL 版本：印表機請設定 PL Simulation = GZPL
+    // 中文：送 Big5 + ^CI17 + 外部字型 E:MingLiU.ttc
+    // 請先用 GoTool → Send File 上傳 MingLiU.ttc 到印表機。
     private String buildZpl(String text) {
         String[] rawLines = text.replace("\r", "").split("\n");
         StringBuilder zpl = new StringBuilder();
 
         zpl.append("^XA\n");
+        zpl.append("^CI17\n");
         zpl.append("^PW320\n");
         zpl.append("^LL240\n");
 
-        int y = 30;
+        int y = 24;
         int printed = 0;
 
         for (String line : rawLines) {
             String safe = sanitizeZplText(line);
             if (safe.length() == 0) continue;
-            if (printed >= 10) break;
+            if (printed >= 9) break;
 
-            zpl.append("^FO30,").append(y)
-                    .append("^A0N,30,30^FD")
+            zpl.append("^FO24,").append(y)
+                    .append("^A@N,28,28,E:MingLiU.ttc^FD")
                     .append(safe)
                     .append("^FS\n");
 
-            y += 40;
+            y += 38;
             printed++;
         }
 
         if (printed == 0) {
-            zpl.append("^FO30,30^A0N,30,30^FDTEST^FS\n");
+            zpl.append("^FO24,24^A@N,28,28,E:MingLiU.ttc^FDEMPTY^FS\n");
         }
 
         zpl.append("^XZ\n");
@@ -276,8 +305,7 @@ public class MainActivity extends Activity {
 
     private String sanitizeZplText(String s) {
         if (s == null) return "";
-        return s.replace("\"", "")
-                .replace("'", "")
+        return s
                 .replace("^", "")
                 .replace("~", "")
                 .replace("\r", "")
@@ -292,13 +320,39 @@ public class MainActivity extends Activity {
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
-        OutputStream out = socket.getOutputStream();
-        out.write(data.getBytes("US-ASCII"));
-        out.flush();
+        OutputStream os = socket.getOutputStream();
+        os.write(data.getBytes(Charset.forName("Big5")));
+        os.flush();
 
-        Thread.sleep(500);
-        out.close();
+        Thread.sleep(300);
+        os.close();
         socket.close();
+    }
+
+    private String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String v : values) {
+            if (v != null && v.trim().length() > 0) return v.trim();
+        }
+        return "";
+    }
+
+    // 如果後端還回傳舊 EZPL，先盡量把可讀文字抽出來。
+    private String extractReadableText(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        String[] lines = raw.replace("\r", "").split("\n");
+        for (String line : lines) {
+            String t = line.trim();
+            if (t.length() == 0) continue;
+            if (t.startsWith("^") || t.startsWith("~") || t.equals("E")) continue;
+            int idx = t.lastIndexOf(",");
+            if (idx >= 0 && idx < t.length() - 1) {
+                String tail = t.substring(idx + 1).replace("\"", "").trim();
+                if (tail.length() > 0) sb.append(tail).append("\n");
+            }
+        }
+        return sb.toString().trim();
     }
 
     private String httpGet(String urlText) throws Exception {
@@ -311,23 +365,23 @@ public class MainActivity extends Activity {
 
         InputStream in = c.getInputStream();
         BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = br.readLine()) != null) sb.append(line);
-
         br.close();
         return sb.toString();
     }
 
     private String cleanUrl(String s) {
+        if (s == null) return "";
+        s = s.trim();
         if (s.endsWith("?")) return s.substring(0, s.length() - 1);
         if (s.endsWith("&")) return s.substring(0, s.length() - 1);
         return s;
     }
 
     private String enc(String s) throws Exception {
-        return URLEncoder.encode(s, "UTF-8");
+        return URLEncoder.encode(s == null ? "" : s, "UTF-8");
     }
 
     private void ui(Runnable r) {
