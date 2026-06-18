@@ -45,7 +45,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(17,17,17));
         scroll.addView(root);
 
-        root.addView(tv("🏷️ 黑心地瓜球 列印橋 EZPL", 28, Color.WHITE, true));
+        root.addView(tv("黑心地瓜球 列印橋 EZPL Final", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255,209,102), true);
         root.addView(statusText);
@@ -65,9 +65,9 @@ public class MainActivity extends Activity {
         portInput = input("9100");
         root.addView(portInput);
 
-        startBtn = btn("▶️ 開始監聽", Color.rgb(6,214,160));
-        stopBtn = btn("⏸ 停止監聽", Color.rgb(239,71,111));
-        testBtn = btn("🧪 測試列印", Color.rgb(142,202,230));
+        startBtn = btn("開始監聽", Color.rgb(6,214,160));
+        stopBtn = btn("停止監聽", Color.rgb(239,71,111));
+        testBtn = btn("測試列印", Color.rgb(142,202,230));
 
         root.addView(startBtn);
         root.addView(stopBtn);
@@ -180,6 +180,7 @@ public class MainActivity extends Activity {
                 });
 
                 sendSocket(ezpl);
+
                 httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
 
                 printedCount++;
@@ -199,46 +200,58 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-private void testPrint() {
-    saveSettings();
-    new Thread(() -> {
-        try {
-            String gepl =
-                    "! 0 200 200 300 1\r\n" +
-                    "TEXT 4 0 30 30 TEST\r\n" +
-                    "TEXT 4 0 30 80 BLACKHEART\r\n" +
-                    "PRINT\r\n";
+    private void testPrint() {
+        saveSettings();
+        new Thread(() -> {
+            try {
+                String ezpl =
+                        "^Q30,2\r\n" +
+                        "^W40\r\n" +
+                        "^H10\r\n" +
+                        "^P1\r\n" +
+                        "^S2\r\n" +
+                        "^AD\r\n" +
+                        "^C1\r\n" +
+                        "^R0\r\n" +
+                        "~Q+0\r\n" +
+                        "^O0\r\n" +
+                        "^D0\r\n" +
+                        "^E12\r\n" +
+                        "AA,20,20,1,1,0,0E,TEST\r\n" +
+                        "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
+                        "E\r\n" +
+                        "~S,FEED\r\n";
 
-            sendSocket(gepl);
+                sendSocket(ezpl);
+                ui(() -> status("EZPL Final 測試列印已送出"));
+            } catch (Exception ex) {
+                ui(() -> {
+                    status("測試失敗：" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
 
-            ui(() -> status("GEPL 測試列印已送出"));
-        } catch (Exception ex) {
-            ui(() -> {
-                status("測試失敗：" + ex.getMessage());
-                log(ex.toString());
-            });
-        }
-    }).start();
-}
+    private void sendSocket(String data) throws Exception {
+        String ip = printerIpInput.getText().toString().trim();
+        int port = Integer.parseInt(portInput.getText().toString().trim());
 
-private void sendSocket(String data) throws Exception {
-    String ip = printerIpInput.getText().toString().trim();
-    int port = Integer.parseInt(portInput.getText().toString().trim());
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(ip, port), 3000);
 
-    Socket socket = new Socket();
-    socket.connect(new InetSocketAddress(ip, port), 3000);
+        OutputStream out = socket.getOutputStream();
 
-    OutputStream out = socket.getOutputStream();
+        out.write(0x02);
+        out.write(data.getBytes("US-ASCII"));
+        out.flush();
 
-    // GEPL 直接送純文字，不要 STX / ETX
-    out.write(data.getBytes("US-ASCII"));
-    out.flush();
+        Thread.sleep(800);
 
-    Thread.sleep(500);
+        out.close();
+        socket.close();
+    }
 
-    out.close();
-    socket.close();
-}
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
