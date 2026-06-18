@@ -202,35 +202,29 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void testPrint() {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String tspl = "^Q30,2\r\n" +
-                        "^W40\r\n" +
-                        "^H10\r\n" +
-                        "^P1\r\n" +
-                        "^S2\r\n" +
-                        "^AD\r\n" +
-                        "^C1\r\n" +
-                        "^R0\r\n" +
-                        "~Q+0\r\n" +
-                        "^O0\r\n" +
-                        "^D0\r\n" +
-                        "^E12\r\n" +
-                        "AA,20,18,1,1,0,0E,TEST\r\n" +
-                        "AA,20,72,1,1,0,0E,ANDROID APK\r\n" +
-                        "AA,20,108,1,1,0,0E,HEIXIN POS\r\n" +
-                        "E\r\n";
-                sendSocket(tspl);
-                ui(() -> status("測試列印已送出"));
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
+   private void testPrint() {
+    saveSettings();
+    new Thread(() -> {
+        try {
+            String tspl =
+                    "SIZE 40 mm,30 mm\r\n" +
+                    "GAP 2 mm,0\r\n" +
+                    "DIRECTION 1\r\n" +
+                    "CLS\r\n" +
+                    "TEXT 20,20,\"0\",0,1,1,\"TEST\"\r\n" +
+                    "TEXT 20,70,\"0\",0,1,1,\"BLACKHEART\"\r\n" +
+                    "PRINT 1\r\n";
+
+            sendSocket(tspl);
+            ui(() -> status("測試列印已送出"));
+        } catch (Exception ex) {
+            ui(() -> {
+                status("測試失敗：" + ex.getMessage());
+                log(ex.toString());
+            });
+        }
+    }).start();
+}
     }
 
     private void sendSocket(String data) throws Exception {
@@ -239,7 +233,7 @@ public class MainActivity extends Activity {
         Socket socket = new Socket();
         socket.connect(new InetSocketAddress(ip, port), 3000);
         OutputStream out = socket.getOutputStream();
-        out.write(data.getBytes("US-ASCII"));
+        out.write(data.getBytes("Big5"));
         out.flush();
         socket.close();
     }
