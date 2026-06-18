@@ -225,7 +225,6 @@ public class MainActivity extends Activity {
         }
     }).start();
 }
-    }
 
    private void sendSocket(String data) throws Exception {
     String ip = printerIpInput.getText().toString().trim();
