@@ -1,4 +1,4 @@
-package com.blackheart.pureprint;
+package com.blackheart.printbridge;
 
 import android.app.Activity;
 import android.os.Bundle;
