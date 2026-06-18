@@ -268,14 +268,16 @@ public class MainActivity extends Activity {
         String[] rawLines = text.replace("\r", "").split("\n");
         StringBuilder zpl = new StringBuilder();
 
-        // GoDEX DX2 / GoLabel 對應版
-        // GoLabel 設定：DownLoad_Asia_Font_1 + FontId=A + UTF-8
-        zpl.append("^Q50,3\n");
-        zpl.append("^W100\n");
-        zpl.append("^H10\n");
-        zpl.append("^P1\n");
-        zpl.append("^S2\n");
-        zpl.append("^AD\n");
+        // GoDEX DT2x / DX2 EZPL：依 GoLabel .ezpx 設定
+        // Label：40mm x 30mm、Gap 3mm
+        // 中文字型：DownLoad_Asia_Font_1 = Z1
+        // EZPL 文字命令格式：AZ1,x,y,x_mul,y_mul,gap,rotationInverse,data
+        zpl.append("^Q30,3\r\n");
+        zpl.append("^W40\r\n");
+        zpl.append("^H10\r\n");
+        zpl.append("^P1\r\n");
+        zpl.append("^S7\r\n");
+        zpl.append("^AD\r\n");
 
         int y = 20;
         int printed = 0;
@@ -283,19 +285,19 @@ public class MainActivity extends Activity {
         for (String line : rawLines) {
             String safe = sanitizeZplText(line);
             if (safe.length() == 0) continue;
-            if (printed >= 9) break;
+            if (printed >= 6) break;
 
-            zpl.append("T 20,")
+            zpl.append("AZ1,20,")
                     .append(y)
-                    .append(",A,2,2,\"")
+                    .append(",2,2,0,0,")
                     .append(safe)
-                    .append("\"\n");
+                    .append("\r\n");
 
             y += 46;
             printed++;
         }
 
-        zpl.append("E\n");
+        zpl.append("E\r\n");
         return zpl.toString();
     }
 
