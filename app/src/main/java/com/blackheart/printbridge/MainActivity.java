@@ -235,7 +235,7 @@ public class MainActivity extends Activity {
     }).start();
 }
 
-   private void sendSocket(String data) throws Exception {
+private void sendSocket(String data) throws Exception {
     String ip = printerIpInput.getText().toString().trim();
     int port = Integer.parseInt(portInput.getText().toString().trim());
 
@@ -243,12 +243,14 @@ public class MainActivity extends Activity {
     socket.connect(new InetSocketAddress(ip, port), 3000);
 
     OutputStream out = socket.getOutputStream();
+
+    out.write(0x02); // STX，告訴 GoDEX 開始解譯指令
     out.write(data.getBytes("US-ASCII"));
     out.flush();
+
     out.close();
     socket.close();
 }
-
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
