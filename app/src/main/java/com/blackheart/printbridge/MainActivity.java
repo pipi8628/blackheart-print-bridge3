@@ -45,7 +45,8 @@ public class MainActivity extends Activity {
         root.setPadding(18, 18, 18, 18);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
 
-        root.addView(tv("黑心地瓜球 POS WebView 自動列印版", 24, Color.WHITE, true));
+        TextView title = tv("黑心地瓜球 POS WebView 自動列印版 GoDEX CMD", 24, Color.WHITE, true);
+        root.addView(title);
 
         statusText = tv("等待操作", 18, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -85,7 +86,7 @@ public class MainActivity extends Activity {
         loadBtn.setOnClickListener(v -> loadPosPage());
         testBtn.setOnClickListener(v -> {
             saveSettings();
-            printText("TEST\nBLACKHEART\n$60");
+            testPrint();
         });
     }
 
@@ -146,6 +147,22 @@ public class MainActivity extends Activity {
         }
     }
 
+    private void testPrint() {
+        new Thread(() -> {
+            try {
+                String cmd = buildGoDexCommand("TEST\nBLACKHEART");
+                sendSocket(cmd);
+                ui(() -> status("新版 GoDEX 指令測試已送出"));
+                ui(() -> log("測試指令:\n" + cmd));
+            } catch (Exception ex) {
+                ui(() -> {
+                    status("測試失敗：" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
+
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
@@ -154,12 +171,12 @@ public class MainActivity extends Activity {
                 if (content.length() == 0) content = "EMPTY";
 
                 final String finalContent = content;
-                final String ezpl = buildEzpl(finalContent);
+                final String cmd = buildGoDexCommand(finalContent);
 
-                sendSocket(ezpl);
+                sendSocket(cmd);
 
                 ui(() -> status("已送出列印"));
-                ui(() -> log("送出內容:\n" + finalContent + "\n\nEZPL:\n" + ezpl));
+                ui(() -> log("送出內容:\n" + finalContent + "\n\nCMD:\n" + cmd));
             } catch (Exception ex) {
                 ui(() -> {
                     status("列印失敗：" + ex.getMessage());
@@ -169,7 +186,7 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private String buildEzpl(String text) {
+    private String buildGoDexCommand(String text) {
         String[] rawLines = text.replace("\r", "").split("\n");
         StringBuilder body = new StringBuilder();
 
@@ -177,46 +194,35 @@ public class MainActivity extends Activity {
         int printed = 0;
 
         for (String line : rawLines) {
-            String safe = sanitizeEzplText(line);
+            String safe = sanitizePrinterText(line);
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            body.append("AA,20,")
+            body.append("TEXT 20,")
                     .append(y)
-                    .append(",1,1,0,0E,")
+                    .append(",\"4\",0,1,1,\"")
                     .append(safe)
-                    .append("\r\n");
+                    .append("\"\r\n");
 
-            y += 42;
+            y += 40;
             printed++;
         }
 
         if (printed == 0) {
-            body.append("AA,20,20,1,1,0,0E,EMPTY\r\n");
+            body.append("TEXT 20,20,\"4\",0,1,1,\"EMPTY\"\r\n");
         }
 
-        return "^Q30,2\r\n" +
-                "^W40\r\n" +
-                "^H10\r\n" +
-                "^P1\r\n" +
-                "^S2\r\n" +
-                "^AD\r\n" +
-                "^C1\r\n" +
-                "^R0\r\n" +
-                "~Q+0\r\n" +
-                "^O0\r\n" +
-                "^D0\r\n" +
-                "^E12\r\n" +
+        return "^XSET,ROTATION,0\r\n" +
+                "^L\r\n" +
                 body.toString() +
-                "E\r\n";
+                "PRINT\r\n";
     }
 
-    private String sanitizeEzplText(String s) {
+    private String sanitizePrinterText(String s) {
         if (s == null) return "";
         return s.replace("\"", "'")
                 .replace("\\", "/")
                 .replace("\t", " ")
-                .replace("，", ",")
                 .trim();
     }
 
