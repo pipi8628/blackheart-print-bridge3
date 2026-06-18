@@ -206,13 +206,19 @@ public class MainActivity extends Activity {
         return zpl.toString();
     }
 
-    private String sanitizeZplText(String s) {
-        if (s == null) return "";
-        return s.replace("^", "")
-                .replace("~", "")
-                .replace("\t", " ")
-                .trim();
-    }
+   private String sanitizeZplText(String s) {
+    if (s == null) return "";
+
+    return s
+        .replace("\"", "")
+        .replace("'", "")
+        .replace(",", " ")
+        .replace("^", "")
+        .replace("~", "")
+        .replace("\r", "")
+        .replace("\n", "")
+        .trim();
+}
 
     private void sendSocket(String data) throws Exception {
         String ip = printerIpInput.getText().toString().trim();
