@@ -227,16 +227,19 @@ public class MainActivity extends Activity {
 }
     }
 
-    private void sendSocket(String data) throws Exception {
-        String ip = printerIpInput.getText().toString().trim();
-        int port = Integer.parseInt(portInput.getText().toString().trim());
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 3000);
-        OutputStream out = socket.getOutputStream();
-        out.write(data.getBytes("Big5"));
-        out.flush();
-        socket.close();
-    }
+   private void sendSocket(String data) throws Exception {
+    String ip = printerIpInput.getText().toString().trim();
+    int port = Integer.parseInt(portInput.getText().toString().trim());
+
+    Socket socket = new Socket();
+    socket.connect(new InetSocketAddress(ip, port), 3000);
+
+    OutputStream out = socket.getOutputStream();
+    out.write(data.getBytes("US-ASCII"));
+    out.flush();
+    out.close();
+    socket.close();
+}
 
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
