@@ -206,17 +206,26 @@ public class MainActivity extends Activity {
     saveSettings();
     new Thread(() -> {
         try {
-            String tspl =
-                    "SIZE 40 mm,30 mm\r\n" +
-                    "GAP 2 mm,0\r\n" +
-                    "DIRECTION 1\r\n" +
-                    "CLS\r\n" +
-                    "TEXT 20,20,\"0\",0,1,1,\"TEST\"\r\n" +
-                    "TEXT 20,70,\"0\",0,1,1,\"BLACKHEART\"\r\n" +
-                    "PRINT 1\r\n";
+            String ezpl =
+                    "^Q30,2\r\n" +
+                    "^W40\r\n" +
+                    "^H10\r\n" +
+                    "^P1\r\n" +
+                    "^S2\r\n" +
+                    "^AD\r\n" +
+                    "^C1\r\n" +
+                    "^R0\r\n" +
+                    "~Q+0\r\n" +
+                    "^O0\r\n" +
+                    "^D0\r\n" +
+                    "^E12\r\n" +
+                    "AA,20,20,1,1,0,0E,TEST\r\n" +
+                    "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
+                    "E\r\n";
 
-            sendSocket(tspl);
-            ui(() -> status("測試列印已送出"));
+            sendSocket(ezpl);
+
+            ui(() -> status("EZPL 測試列印已送出"));
         } catch (Exception ex) {
             ui(() -> {
                 status("測試失敗：" + ex.getMessage());
