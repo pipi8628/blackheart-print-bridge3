@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.0 ZPL Big5 VF版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 DX2 VF Big5版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -266,12 +266,15 @@ public class MainActivity extends Activity {
 
     private String buildZpl(String text) {
         String[] rawLines = text.replace("\r", "").split("\n");
-        StringBuilder zpl = new StringBuilder();
+        StringBuilder ezpl = new StringBuilder();
 
-        zpl.append("^XA\n");
-        zpl.append("^CI28\n");
-        zpl.append("^PW320\n");
-        zpl.append("^LL240\n");
+        // GoDEX DX2 / EZPL / Soft Font VF / Big5
+        ezpl.append("^Q50,3\n");
+        ezpl.append("^W100\n");
+        ezpl.append("^H10\n");
+        ezpl.append("^P1\n");
+        ezpl.append("^S2\n");
+        ezpl.append("^AD\n");
 
         int y = 20;
         int printed = 0;
@@ -281,17 +284,18 @@ public class MainActivity extends Activity {
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            zpl.append("^FO20,").append(y)
-                    .append("^A0N,30,30^FD")
+            ezpl.append("TEXT 20,")
+                    .append(y)
+                    .append(",\"VF\",0,1,1,\"")
                     .append(safe)
-                    .append("^FS\n");
+                    .append("\"\n");
 
-            y += 42;
+            y += 40;
             printed++;
         }
 
-        zpl.append("^XZ\n");
-        return zpl.toString();
+        ezpl.append("PRINT\n");
+        return ezpl.toString();
     }
 
     private String sanitizeZplText(String text) {
@@ -335,7 +339,7 @@ public class MainActivity extends Activity {
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("UTF-8"));
+        os.write(data.getBytes("Big5"));
         os.flush();
 
         Thread.sleep(300);
