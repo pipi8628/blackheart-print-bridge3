@@ -268,10 +268,13 @@ public class MainActivity extends Activity {
         String[] rawLines = text.replace("\r", "").split("\n");
         StringBuilder zpl = new StringBuilder();
 
-        zpl.append("^XA\n");
-        zpl.append("^CI28\n");
-        zpl.append("^PW320\n");
-        zpl.append("^LL240\n");
+        // GoDEX EZPL + VF中文字型
+        zpl.append("^Q50,3\n");
+        zpl.append("^W100\n");
+        zpl.append("^H10\n");
+        zpl.append("^P1\n");
+        zpl.append("^S2\n");
+        zpl.append("^AD\n");
 
         int y = 20;
         int printed = 0;
@@ -281,16 +284,17 @@ public class MainActivity extends Activity {
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            zpl.append("^FO20,").append(y)
-                    .append("^A0N,30,30^FD")
+            zpl.append("TEXT 20,")
+                    .append(y)
+                    .append(",\"VF\",0,1,1,\"")
                     .append(safe)
-                    .append("^FS\n");
+                    .append("\"\n");
 
-            y += 42;
+            y += 40;
             printed++;
         }
 
-        zpl.append("^XZ\n");
+        zpl.append("PRINT\n");
         return zpl.toString();
     }
 
@@ -335,7 +339,7 @@ public class MainActivity extends Activity {
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("UTF-8"));
+        os.write(data.getBytes("Big5"));
         os.flush();
 
         Thread.sleep(300);
