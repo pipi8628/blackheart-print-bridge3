@@ -182,13 +182,10 @@ public class MainActivity extends Activity {
             String safe = sanitizeEzplText(line);
             if (safe.length() == 0) continue;
 
-            while (safe.length() > 16) {
-                String part = safe.substring(0, 16);
-                body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(part).append("\"\r\n");
-                y += 42;
-                printed++;
-                safe = safe.substring(16);
-                if (printed >= 9) break;
+            body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(safe).append("\"\r\n");
+y += 42;
+printed++;
+if (printed >= 9) break;
             }
 
             if (printed >= 9) break;
