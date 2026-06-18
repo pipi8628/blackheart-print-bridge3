@@ -45,8 +45,7 @@ public class MainActivity extends Activity {
         root.setPadding(18, 18, 18, 18);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
 
-        TextView title = tv("黑心地瓜球 POS WebView 自動列印版", 24, Color.WHITE, true);
-        root.addView(title);
+        root.addView(tv("黑心地瓜球 POS WebView 自動列印版", 24, Color.WHITE, true));
 
         statusText = tv("等待操作", 18, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -86,7 +85,7 @@ public class MainActivity extends Activity {
         loadBtn.setOnClickListener(v -> loadPosPage());
         testBtn.setOnClickListener(v -> {
             saveSettings();
-            printText("測試列印\nBLACKHEART");
+            printText("TEST\nBLACKHEART\n$60");
         });
     }
 
@@ -161,7 +160,6 @@ public class MainActivity extends Activity {
 
                 ui(() -> status("已送出列印"));
                 ui(() -> log("送出內容:\n" + finalContent + "\n\nEZPL:\n" + ezpl));
-
             } catch (Exception ex) {
                 ui(() -> {
                     status("列印失敗：" + ex.getMessage());
@@ -181,17 +179,20 @@ public class MainActivity extends Activity {
         for (String line : rawLines) {
             String safe = sanitizeEzplText(line);
             if (safe.length() == 0) continue;
-
             if (printed >= 9) break;
 
-            body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(safe).append("\"\r\n");
+            body.append("AA,20,")
+                    .append(y)
+                    .append(",1,1,0,0E,")
+                    .append(safe)
+                    .append("\r\n");
+
             y += 42;
             printed++;
-            if (printed >= 9) break;
         }
 
         if (printed == 0) {
-            body.append("AA,20,20,1,1,0,0E,\"EMPTY\"\r\n");
+            body.append("AA,20,20,1,1,0,0E,EMPTY\r\n");
         }
 
         return "^Q30,2\r\n" +
@@ -215,6 +216,7 @@ public class MainActivity extends Activity {
         return s.replace("\"", "'")
                 .replace("\\", "/")
                 .replace("\t", " ")
+                .replace("，", ",")
                 .trim();
     }
 
