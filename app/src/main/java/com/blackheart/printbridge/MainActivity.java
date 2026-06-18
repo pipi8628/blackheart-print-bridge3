@@ -199,39 +199,29 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    private void testPrint() {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String ezpl =
-                        "^Q30,2\r\n" +
-                        "^W40\r\n" +
-                        "^H10\r\n" +
-                        "^P2\r\n" +
-                        "^S2\r\n" +
-                        "^AD\r\n" +
-                        "^C1\r\n" +
-                        "^R0\r\n" +
-                        "~Q+0\r\n" +
-                        "^O0\r\n" +
-                        "^D0\r\n" +
-                        "^E12\r\n" +
-                        "AA,20,20,1,1,0,0E,TEST\r\n" +
-                        "AA,20,70,1,1,0,0E,BLACKHEART\r\n" +
-                        "E\r\n";
+private void testPrint() {
+    saveSettings();
+    new Thread(() -> {
+        try {
+            String gepl =
+                    "! 0 200 200 300 1\r\n" +
+                    "TEXT 4 0 30 30 TEST\r\n" +
+                    "TEXT 4 0 30 80 BLACKHEART\r\n" +
+                    "PRINT\r\n";
 
-                sendSocket(ezpl);
-                ui(() -> status("EZPL 測試列印已送出"));
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
-    }
+            sendSocket(gepl);
 
-    private void sendSocket(String data) throws Exception {
+            ui(() -> status("GEPL 測試列印已送出"));
+        } catch (Exception ex) {
+            ui(() -> {
+                status("測試失敗：" + ex.getMessage());
+                log(ex.toString());
+            });
+        }
+    }).start();
+}
+
+private void sendSocket(String data) throws Exception {
     String ip = printerIpInput.getText().toString().trim();
     int port = Integer.parseInt(portInput.getText().toString().trim());
 
@@ -240,11 +230,8 @@ public class MainActivity extends Activity {
 
     OutputStream out = socket.getOutputStream();
 
-    out.write(0x02); // STX
-    out.write("\r\n".getBytes("US-ASCII"));
+    // GEPL 直接送純文字，不要 STX / ETX
     out.write(data.getBytes("US-ASCII"));
-    out.write("\r\n".getBytes("US-ASCII"));
-    out.write(0x03); // ETX
     out.flush();
 
     Thread.sleep(500);
