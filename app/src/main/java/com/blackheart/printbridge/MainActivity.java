@@ -182,12 +182,6 @@ public class MainActivity extends Activity {
             String safe = sanitizeEzplText(line);
             if (safe.length() == 0) continue;
 
-            body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(safe).append("\"\r\n");
-y += 42;
-printed++;
-if (printed >= 9) break;
-            }
-
             if (printed >= 9) break;
 
             body.append("AA,20,").append(y).append(",1,1,0,0E,\"").append(safe).append("\"\r\n");
