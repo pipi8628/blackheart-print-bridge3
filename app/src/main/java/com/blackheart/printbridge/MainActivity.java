@@ -235,7 +235,8 @@ public class MainActivity extends Activity {
     }).start();
 }
 
-private void sendSocket(String data) throws Exception {
+
+   private void sendSocket(String data) throws Exception {
     String ip = printerIpInput.getText().toString().trim();
     int port = Integer.parseInt(portInput.getText().toString().trim());
 
@@ -244,28 +245,16 @@ private void sendSocket(String data) throws Exception {
 
     OutputStream out = socket.getOutputStream();
 
-    out.write(0x02); // STX，告訴 GoDEX 開始解譯指令
+    out.write(0x02); // STX 開始
     out.write(data.getBytes("US-ASCII"));
+    out.write(0x03); // ETX 結束
     out.flush();
+
+    Thread.sleep(300);
 
     out.close();
     socket.close();
 }
-    private String httpGet(String urlText) throws Exception {
-        URL url = new URL(urlText);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
-        c.setRequestMethod("GET");
-        c.setInstanceFollowRedirects(true);
-        InputStream in = c.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line);
-        br.close();
-        return sb.toString();
-    }
 
     private String cleanUrl(String s) {
         if (s.endsWith("?")) return s.substring(0, s.length()-1);
