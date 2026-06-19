@@ -7,6 +7,10 @@ import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.view.ViewGroup;
 import android.widget.*;
 
@@ -21,7 +25,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
-import java.nio.charset.Charset;
 
 public class MainActivity extends Activity {
 
@@ -208,7 +211,7 @@ public class MainActivity extends Activity {
                 }
 
                 final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
-                final String zpl = buildEzpl(finalText);
+                final String zpl = buildEzplImage(finalText);
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
@@ -246,7 +249,7 @@ public class MainActivity extends Activity {
                 if (content.length() == 0) content = "TEST";
 
                 final String finalContent = content;
-                final String zpl = buildEzpl(finalContent);
+                final String zpl = buildEzplImage(finalContent);
 
                 ui(() -> {
                     status("列印中...");
@@ -266,53 +269,120 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // DX2 原生 EZPL 版本：不走 ZPL/GZPL，不用外掛字型。
-    // 中文：~X,UTF8 + AH 內建中文字體 + UTF-8 bytes。
-    private String buildEzpl(String text) {
-        String[] rawLines = (text == null ? "" : text)
+    // DX2 最穩定方案：把中文先畫成 Bitmap，再用 EZPL 圖像指令列印。
+    // 這樣不需要 Big5 / UTF-8 / AH / VF / AZ1，也不依賴印表機中文字型。
+    private String buildEzplImage(String text) {
+        String content = text == null ? "TEST" : text
                 .replace("\r", "")
-                .split("\n");
+                .replace("\n", " ")
+                .trim();
+        if (content.length() == 0) content = "TEST";
+
+        Bitmap bmp = textToBitmap(content);
+        String hex = bitmapToHex(bmp);
+
+        int widthBytes = (bmp.getWidth() + 7) / 8;
+        int height = bmp.getHeight();
 
         StringBuilder ezpl = new StringBuilder();
-
         ezpl.append("^L\r\n");
         ezpl.append("^H12\r\n");
         ezpl.append("^Q40,3\r\n");
         ezpl.append("^W60\r\n");
         ezpl.append("^1\r\n");
-        ezpl.append("~X,UTF8\r\n");
-
-        int y = 60;
-        int printed = 0;
-
-        for (String line : rawLines) {
-            String safe = sanitizeEzplText(line);
-            if (safe.length() == 0) continue;
-            if (printed >= 5) break;
-
-            ezpl.append("AH,40,").append(y)
-                    .append(",1,1,0,0,")
-                    .append(safe)
-                    .append("\r\n");
-
-            y += 45;
-            printed++;
-        }
-
-        if (printed == 0) {
-            ezpl.append("AH,40,60,1,1,0,0,TEST\r\n");
-        }
-
+        ezpl.append("GW,0,0,")
+                .append(widthBytes).append(",")
+                .append(height).append(",")
+                .append(hex)
+                .append("\r\n");
         ezpl.append("E\r\n");
         return ezpl.toString();
     }
 
-    private String sanitizeEzplText(String s) {
+    private Bitmap textToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(34);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+
+        int maxWidth = 320;
+        int padding = 16;
+        int lineHeight = 44;
+
+        java.util.ArrayList<String> lines = wrapText(text, paint, maxWidth - padding * 2);
+        if (lines.size() == 0) lines.add("TEST");
+        if (lines.size() > 5) {
+            while (lines.size() > 5) lines.remove(lines.size() - 1);
+        }
+
+        int height = padding * 2 + lineHeight * lines.size();
+        Bitmap bitmap = Bitmap.createBitmap(maxWidth, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        int y = padding + 34;
+        for (String line : lines) {
+            canvas.drawText(line, padding, y, paint);
+            y += lineHeight;
+        }
+        return bitmap;
+    }
+
+    private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            String next = current.toString() + ch;
+            if (paint.measureText(next) > maxWidth && current.length() > 0) {
+                lines.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(ch);
+        }
+
+        if (current.length() > 0) lines.add(current.toString());
+        return lines;
+    }
+
+    private String bitmapToHex(Bitmap bmp) {
+        StringBuilder hex = new StringBuilder();
+        int width = bmp.getWidth();
+        int height = bmp.getHeight();
+
+        for (int y = 0; y < height; y++) {
+            int bit = 0;
+            int value = 0;
+
+            for (int x = 0; x < width; x++) {
+                int pixel = bmp.getPixel(x, y);
+                int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
+
+                value <<= 1;
+                if (gray < 160) value |= 1;
+                bit++;
+
+                if (bit == 8) {
+                    hex.append(String.format("%02X", value & 0xFF));
+                    bit = 0;
+                    value = 0;
+                }
+            }
+
+            if (bit > 0) {
+                value <<= (8 - bit);
+                hex.append(String.format("%02X", value & 0xFF));
+            }
+        }
+        return hex.toString();
+    }
+
+    private String sanitizeZplText(String s) {
         if (s == null) return "";
         return s
                 .replace("^", "")
                 .replace("~", "")
-                .replace(",", "，")
                 .replace("\r", "")
                 .replace("\n", "")
                 .trim();
@@ -327,10 +397,10 @@ public class MainActivity extends Activity {
         socket.setSoTimeout(5000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("UTF-8"));
+        os.write(data.getBytes("US-ASCII"));
         os.flush();
 
-        Thread.sleep(800);
+        Thread.sleep(1000);
         os.close();
         socket.close();
     }
