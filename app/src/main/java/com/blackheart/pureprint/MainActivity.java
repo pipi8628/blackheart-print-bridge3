@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.1 ZPL 極簡穩定版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 V5.0 DX2 EZPL UTF8 中文版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("TEST BLACKHEART"));
+        testBtn.setOnClickListener(v -> printText("自寫程式測試成功\n黑心地瓜球"));
 
         setContentView(scroll);
     }
@@ -208,7 +208,7 @@ public class MainActivity extends Activity {
                 }
 
                 final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
-                final String zpl = buildZpl(finalText);
+                final String zpl = buildEzpl(finalText);
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
@@ -246,7 +246,7 @@ public class MainActivity extends Activity {
                 if (content.length() == 0) content = "TEST";
 
                 final String finalContent = content;
-                final String zpl = buildZpl(finalContent);
+                final String zpl = buildEzpl(finalContent);
 
                 ui(() -> {
                     status("列印中...");
@@ -266,33 +266,70 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // ZPL 極簡穩定測試版：不使用中文、不載入外部字型、不使用 ^CI17。
-    // 目的：確認 DX2 在 GZPL 模式下是否會穩定出紙、不卡住。
-private String buildZpl(String text) {
-    String content = text == null ? "TEST" : text
-            .replace("\r", "")
-            .replace("\n", " ")
-            .trim();
+    // DX2 原生 EZPL 版本：不走 ZPL/GZPL，不用外掛字型。
+    // 中文：~X,UTF8 + AH 內建中文字體 + UTF-8 bytes。
+    private String buildEzpl(String text) {
+        String[] rawLines = (text == null ? "" : text)
+                .replace("
+", "")
+                .split("
+");
 
-    if (content.length() == 0) content = "TEST";
+        StringBuilder ezpl = new StringBuilder();
 
-    StringBuilder zpl = new StringBuilder();
+        ezpl.append("^L
+");
+        ezpl.append("^H12
+");
+        ezpl.append("^Q40,3
+");
+        ezpl.append("^W60
+");
+        ezpl.append("^1
+");
+        ezpl.append("~X,UTF8
+");
 
-    // 每次列印前先清空佇列 + Reset
-    zpl.append("~JA\r\n");
-    zpl.append("~JR\r\n");
+        int y = 60;
+        int printed = 0;
 
-    // 正式列印
-    zpl.append("^XA\r\n");
-    zpl.append("^PW320\r\n");
-    zpl.append("^LL60\r\n");
-    zpl.append("^FO20,10^A0N,20,20^FD")
-            .append(content)
-            .append("^FS\r\n");
-    zpl.append("^XZ\r\n");
+        for (String line : rawLines) {
+            String safe = sanitizeEzplText(line);
+            if (safe.length() == 0) continue;
+            if (printed >= 5) break;
 
-    return zpl.toString();
-}
+            ezpl.append("AH,40,").append(y)
+                    .append(",1,1,0,0,")
+                    .append(safe)
+                    .append("
+");
+
+            y += 45;
+            printed++;
+        }
+
+        if (printed == 0) {
+            ezpl.append("AH,40,60,1,1,0,0,TEST
+");
+        }
+
+        ezpl.append("E
+");
+        return ezpl.toString();
+    }
+
+    private String sanitizeEzplText(String s) {
+        if (s == null) return "";
+        return s
+                .replace("^", "")
+                .replace("~", "")
+                .replace(",", "，")
+                .replace("
+", "")
+                .replace("
+", "")
+                .trim();
+    }
 
     private String sanitizeZplText(String s) {
         if (s == null) return "";
@@ -304,25 +341,22 @@ private String buildZpl(String text) {
                 .trim();
     }
 
-private void sendSocket(String data) throws Exception {
-    String ip = printerIpInput.getText().toString().trim();
-    int port = Integer.parseInt(portInput.getText().toString().trim());
+    private void sendSocket(String data) throws Exception {
+        String ip = printerIpInput.getText().toString().trim();
+        int port = Integer.parseInt(portInput.getText().toString().trim());
 
-    Socket socket = new Socket();
-    socket.connect(new InetSocketAddress(ip, port), 5000);
-    socket.setSoTimeout(5000);
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(ip, port), 5000);
+        socket.setSoTimeout(5000);
 
-    OutputStream os = socket.getOutputStream();
+        OutputStream os = socket.getOutputStream();
+        os.write(data.getBytes("UTF-8"));
+        os.flush();
 
-    os.write(data.getBytes("US-ASCII"));
-    os.write("\r\n".getBytes("US-ASCII"));
-    os.flush();
-
-    Thread.sleep(1000);
-
-    os.close();
-    socket.close();
-}
+        Thread.sleep(800);
+        os.close();
+        socket.close();
+    }
 
     private String firstNonEmpty(String... values) {
         if (values == null) return "";
