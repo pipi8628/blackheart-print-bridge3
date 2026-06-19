@@ -278,6 +278,11 @@ private String buildZpl(String text) {
 
     StringBuilder zpl = new StringBuilder();
 
+    // 每次列印前先清空佇列 + Reset
+    zpl.append("~JA\r\n");
+    zpl.append("~JR\r\n");
+
+    // 正式列印
     zpl.append("^XA\r\n");
     zpl.append("^PW320\r\n");
     zpl.append("^LL60\r\n");
