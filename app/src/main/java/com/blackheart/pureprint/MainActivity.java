@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V5.0 DX2 EZPL UTF8 中文版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 V4.0 ZPL 中文字型版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("自寫程式測試成功\n黑心地瓜球"));
+        testBtn.setOnClickListener(v -> printText("TEST\nBLACKHEART"));
 
         setContentView(scroll);
     }
@@ -270,25 +270,17 @@ public class MainActivity extends Activity {
     // 中文：~X,UTF8 + AH 內建中文字體 + UTF-8 bytes。
     private String buildEzpl(String text) {
         String[] rawLines = (text == null ? "" : text)
-                .replace("
-", "")
-                .split("
-");
+                .replace("\r", "")
+                .split("\n");
 
         StringBuilder ezpl = new StringBuilder();
 
-        ezpl.append("^L
-");
-        ezpl.append("^H12
-");
-        ezpl.append("^Q40,3
-");
-        ezpl.append("^W60
-");
-        ezpl.append("^1
-");
-        ezpl.append("~X,UTF8
-");
+        ezpl.append("^L\r\n");
+        ezpl.append("^H12\r\n");
+        ezpl.append("^Q40,3\r\n");
+        ezpl.append("^W60\r\n");
+        ezpl.append("^1\r\n");
+        ezpl.append("~X,UTF8\r\n");
 
         int y = 60;
         int printed = 0;
@@ -301,20 +293,17 @@ public class MainActivity extends Activity {
             ezpl.append("AH,40,").append(y)
                     .append(",1,1,0,0,")
                     .append(safe)
-                    .append("
-");
+                    .append("\r\n");
 
             y += 45;
             printed++;
         }
 
         if (printed == 0) {
-            ezpl.append("AH,40,60,1,1,0,0,TEST
-");
+            ezpl.append("AH,40,60,1,1,0,0,TEST\r\n");
         }
 
-        ezpl.append("E
-");
+        ezpl.append("E\r\n");
         return ezpl.toString();
     }
 
@@ -324,18 +313,6 @@ public class MainActivity extends Activity {
                 .replace("^", "")
                 .replace("~", "")
                 .replace(",", "，")
-                .replace("
-", "")
-                .replace("
-", "")
-                .trim();
-    }
-
-    private String sanitizeZplText(String s) {
-        if (s == null) return "";
-        return s
-                .replace("^", "")
-                .replace("~", "")
                 .replace("\r", "")
                 .replace("\n", "")
                 .trim();
