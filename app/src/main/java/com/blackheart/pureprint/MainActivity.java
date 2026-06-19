@@ -282,8 +282,8 @@ private String buildZpl(String text) {
     zpl.append("^PW320\r\n");
     zpl.append("^LL60\r\n");
     zpl.append("^FO20,10^A0N,20,20^FD")
-       .append(content)
-       .append("^FS\r\n");
+            .append(content)
+            .append("^FS\r\n");
     zpl.append("^XZ\r\n");
 
     return zpl.toString();
@@ -299,21 +299,25 @@ private String buildZpl(String text) {
                 .trim();
     }
 
-    private void sendSocket(String data) throws Exception {
-        String ip = printerIpInput.getText().toString().trim();
-        int port = Integer.parseInt(portInput.getText().toString().trim());
+private void sendSocket(String data) throws Exception {
+    String ip = printerIpInput.getText().toString().trim();
+    int port = Integer.parseInt(portInput.getText().toString().trim());
 
-        Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 3000);
+    Socket socket = new Socket();
+    socket.connect(new InetSocketAddress(ip, port), 5000);
+    socket.setSoTimeout(5000);
 
-        OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes(Charset.forName("US-ASCII")));
-        os.flush();
+    OutputStream os = socket.getOutputStream();
 
-        Thread.sleep(300);
-        os.close();
-        socket.close();
-    }
+    os.write(data.getBytes("US-ASCII"));
+    os.write("\r\n".getBytes("US-ASCII"));
+    os.flush();
+
+    Thread.sleep(1000);
+
+    os.close();
+    socket.close();
+}
 
     private String firstNonEmpty(String... values) {
         if (values == null) return "";
