@@ -269,24 +269,17 @@ public class MainActivity extends Activity {
     // ZPL 極簡穩定測試版：不使用中文、不載入外部字型、不使用 ^CI17。
     // 目的：確認 DX2 在 GZPL 模式下是否會穩定出紙、不卡住。
     private String buildZpl(String text) {
-        String content = text == null ? "" : text.replace("
-", " ").replace("
-", " ").trim();
+        String content = text == null ? "" : text.replace("\r", " ").replace("\n", " ").trim();
         if (content.length() == 0) content = "TEST BLACKHEART";
         content = sanitizeZplText(content);
         if (content.length() > 28) content = content.substring(0, 28);
 
         StringBuilder zpl = new StringBuilder();
-        zpl.append("^XA
-");
-        zpl.append("^PW320
-");
-        zpl.append("^LL120
-");
-        zpl.append("^FO30,30^A0N,30,30^FD").append(content).append("^FS
-");
-        zpl.append("^XZ
-");
+        zpl.append("^XA\r\n");
+        zpl.append("^PW320\r\n");
+        zpl.append("^LL120\r\n");
+        zpl.append("^FO30,30^A0N,30,30^FD").append(content).append("^FS\r\n");
+        zpl.append("^XZ\r\n");
         return zpl.toString();
     }
 
