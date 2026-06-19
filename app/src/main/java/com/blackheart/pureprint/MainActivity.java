@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.1 GoDEX DX2 EZPL VF版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 V4.1 ZPL 保守版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\nTEST BLACKHEART"));
+        testBtn.setOnClickListener(v -> printText("黑心地瓜球\nTEST"));
 
         setContentView(scroll);
     }
@@ -212,7 +212,7 @@ public class MainActivity extends Activity {
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
-                    log("送出EZPL內容:\n" + zpl);
+                    log("送出內容:\n" + zpl);
                 });
 
                 sendSocket(zpl);
@@ -250,7 +250,7 @@ public class MainActivity extends Activity {
 
                 ui(() -> {
                     status("列印中...");
-                    log("送出EZPL內容:\n" + zpl);
+                    log("送出內容:\n" + zpl);
                 });
 
                 sendSocket(zpl);
@@ -266,49 +266,45 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // GoDEX DX2 EZPL 版本：保留原本「會出紙」的 Socket 流程，只把指令改成 EZPL + VF 字型。
-    // 中文字型：請確認印表機內已下載字型，字型識別碼為 VF。
-    // 若中文仍變 ??，代表 VF 字型或印表機字碼表仍未對上，但連線/出紙流程是正常的。
+    // ZPL 保守版：保留「能出紙」版本的 ZPL 外殼，不使用 EZPL AT/VF，避免逼逼卡住。
+    // 印表機請設定 PL Simulation = GZPL。
+    // 中文：送 Big5 + ^CI17 + 外部字型 E:MingLiU.ttc。
+    // 請先用 GoTool → Send File 上傳 MingLiU.ttc 到印表機。
     private String buildZpl(String text) {
-        return buildEzpl(text);
-    }
-
-    private String buildEzpl(String text) {
         String[] rawLines = text.replace("\r", "").split("\n");
-        StringBuilder ezpl = new StringBuilder();
+        StringBuilder zpl = new StringBuilder();
 
-        ezpl.append("^L\r\n");
-        ezpl.append("Q40,3\r\n");
-        ezpl.append("W54\r\n");
-        ezpl.append("H10\r\n");
+        zpl.append("^XA\n");
+        zpl.append("^CI17\n");
+        zpl.append("^PW320\n");
+        zpl.append("^LL240\n");
 
-        int y = 30;
+        int y = 24;
         int printed = 0;
 
         for (String line : rawLines) {
-            String safe = sanitizeEzplText(line);
+            String safe = sanitizeZplText(line);
             if (safe.length() == 0) continue;
             if (printed >= 9) break;
 
-            // AT：使用下載到印表機內的字型 VF 列印中文
-            ezpl.append("AT,20,").append(y)
-                    .append(",30,30,0,0,VF,")
+            zpl.append("^FO24,").append(y)
+                    .append("^A@N,28,28,E:MingLiU.ttc^FD")
                     .append(safe)
-                    .append("\r\n");
+                    .append("^FS\n");
 
-            y += 42;
+            y += 38;
             printed++;
         }
 
         if (printed == 0) {
-            ezpl.append("AE,20,30,1,1,0,0,EMPTY\r\n");
+            zpl.append("^FO24,24^A@N,28,28,E:MingLiU.ttc^FDEMPTY^FS\n");
         }
 
-        ezpl.append("E\r\n");
-        return ezpl.toString();
+        zpl.append("^XZ\n");
+        return zpl.toString();
     }
 
-    private String sanitizeEzplText(String s) {
+    private String sanitizeZplText(String s) {
         if (s == null) return "";
         return s
                 .replace("^", "")
