@@ -63,7 +63,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.1 ZPL 保守版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ 黑心純列印 V4.1 ZPL 極簡穩定版", 28, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("黑心地瓜球\nTEST"));
+        testBtn.setOnClickListener(v -> printText("TEST BLACKHEART"));
 
         setContentView(scroll);
     }
@@ -266,41 +266,27 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // ZPL 保守版：保留「能出紙」版本的 ZPL 外殼，不使用 EZPL AT/VF，避免逼逼卡住。
-    // 印表機請設定 PL Simulation = GZPL。
-    // 中文：送 Big5 + ^CI17 + 外部字型 E:MingLiU.ttc。
-    // 請先用 GoTool → Send File 上傳 MingLiU.ttc 到印表機。
+    // ZPL 極簡穩定測試版：不使用中文、不載入外部字型、不使用 ^CI17。
+    // 目的：確認 DX2 在 GZPL 模式下是否會穩定出紙、不卡住。
     private String buildZpl(String text) {
-        String[] rawLines = text.replace("\r", "").split("\n");
+        String content = text == null ? "" : text.replace("
+", " ").replace("
+", " ").trim();
+        if (content.length() == 0) content = "TEST BLACKHEART";
+        content = sanitizeZplText(content);
+        if (content.length() > 28) content = content.substring(0, 28);
+
         StringBuilder zpl = new StringBuilder();
-
-        zpl.append("^XA\n");
-        zpl.append("^CI17\n");
-        zpl.append("^PW320\n");
-        zpl.append("^LL240\n");
-
-        int y = 24;
-        int printed = 0;
-
-        for (String line : rawLines) {
-            String safe = sanitizeZplText(line);
-            if (safe.length() == 0) continue;
-            if (printed >= 9) break;
-
-            zpl.append("^FO24,").append(y)
-                    .append("^A@N,28,28,E:MingLiU.ttc^FD")
-                    .append(safe)
-                    .append("^FS\n");
-
-            y += 38;
-            printed++;
-        }
-
-        if (printed == 0) {
-            zpl.append("^FO24,24^A@N,28,28,E:MingLiU.ttc^FDEMPTY^FS\n");
-        }
-
-        zpl.append("^XZ\n");
+        zpl.append("^XA
+");
+        zpl.append("^PW320
+");
+        zpl.append("^LL120
+");
+        zpl.append("^FO30,30^A0N,30,30^FD").append(content).append("^FS
+");
+        zpl.append("^XZ
+");
         return zpl.toString();
     }
 
@@ -322,7 +308,7 @@ public class MainActivity extends Activity {
         socket.connect(new InetSocketAddress(ip, port), 3000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes(Charset.forName("Big5")));
+        os.write(data.getBytes(Charset.forName("US-ASCII")));
         os.flush();
 
         Thread.sleep(300);
