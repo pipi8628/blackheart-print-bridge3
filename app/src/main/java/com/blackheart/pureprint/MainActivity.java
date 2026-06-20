@@ -26,6 +26,9 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
 
@@ -165,8 +168,10 @@ public class MainActivity extends Activity {
         webAppUrlInput.setText(prefs.getString("webAppUrl", ""));
         printerIpInput.setText(prefs.getString("printerIp", "192.168.31.189"));
         portInput.setText(prefs.getString("port", "9100"));
-        ignoreBeforeOrderNo = prefs.getInt("ignoreBeforeOrderNo", 0);
-        ignoreBeforeRowNo = prefs.getInt("ignoreBeforeRowNo", 0);
+        // 只印當天版：不再載入舊的 ignore row/order 設定，避免新單被誤擋。
+        ignoreBeforeOrderNo = 0;
+        ignoreBeforeRowNo = 0;
+        prefs.edit().remove("ignoreBeforeOrderNo").remove("ignoreBeforeRowNo").apply();
     }
 
     private void saveSettings() {
@@ -174,8 +179,6 @@ public class MainActivity extends Activity {
                 .putString("webAppUrl", webAppUrlInput.getText().toString().trim())
                 .putString("printerIp", printerIpInput.getText().toString().trim())
                 .putString("port", portInput.getText().toString().trim())
-                .putInt("ignoreBeforeOrderNo", ignoreBeforeOrderNo)
-                .putInt("ignoreBeforeRowNo", ignoreBeforeRowNo)
                 .apply();
     }
 
@@ -224,21 +227,12 @@ public class MainActivity extends Activity {
                 lastOrderNo = orderNo;
                 lastLabelNo = labelNo;
 
-                int currentOrderNo = parseOrderNo(orderNo);
-                int currentRowNo = parseOrderNo(row);
-                boolean isOldOrder = false;
-                if (ignoreBeforeOrderNo > 0 && currentOrderNo > 0 && currentOrderNo <= ignoreBeforeOrderNo) {
-                    isOldOrder = true;
-                }
-                if (ignoreBeforeRowNo > 0 && currentRowNo > 0 && currentRowNo <= ignoreBeforeRowNo) {
-                    isOldOrder = true;
-                }
-
-                if (isOldOrder) {
+                String orderDateText = getOrderDateText(job);
+                if (!isTodayOrder(orderDateText)) {
                     if (row.length() > 0 || id.length() > 0) {
                         httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
                     }
-                    final String skippedMsg = "舊單自動略過 #" + orderNo + " 第 " + labelNo + " 張";
+                    final String skippedMsg = "非今日訂單自動略過 #" + orderNo + "｜日期=" + orderDateText;
                     ui(() -> {
                         status(skippedMsg);
                         working = false;
@@ -652,6 +646,45 @@ public class MainActivity extends Activity {
             }
         }
         return sb.toString().trim();
+    }
+
+    private String getOrderDateText(JSONObject job) {
+        return firstNonEmpty(
+                job.optString("date", ""),
+                job.optString("orderDate", ""),
+                job.optString("createdAt", ""),
+                job.optString("created_at", ""),
+                job.optString("timestamp", ""),
+                job.optString("time", ""),
+                job.optString("datetime", ""),
+                job.optString("createdTime", "")
+        );
+    }
+
+    private boolean isTodayOrder(String dateText) {
+        if (dateText == null || dateText.trim().length() == 0) {
+            // 後端若尚未回傳日期，先放行，避免新單被誤擋。
+            return true;
+        }
+
+        String s = dateText.trim();
+        String todayDash = new SimpleDateFormat("yyyy-MM-dd", Locale.TAIWAN).format(new Date());
+        String todaySlash = new SimpleDateFormat("yyyy/MM/dd", Locale.TAIWAN).format(new Date());
+        String todaySlashNoZero = new SimpleDateFormat("yyyy/M/d", Locale.TAIWAN).format(new Date());
+        String todayMd = new SimpleDateFormat("M/d", Locale.TAIWAN).format(new Date());
+        String todayMdZero = new SimpleDateFormat("MM/dd", Locale.TAIWAN).format(new Date());
+        String todayChinese = new SimpleDateFormat("yyyy年M月d日", Locale.TAIWAN).format(new Date());
+
+        if (s.contains(todayDash)) return true;
+        if (s.contains(todaySlash)) return true;
+        if (s.contains(todaySlashNoZero)) return true;
+        if (s.contains(todayChinese)) return true;
+
+        // 避免 6/2 誤判 6/20：只有字串開頭就是月/日時才使用 M/d 判斷。
+        if (s.startsWith(todayMd + " ") || s.startsWith(todayMd + "　") || s.equals(todayMd)) return true;
+        if (s.startsWith(todayMdZero + " ") || s.startsWith(todayMdZero + "　") || s.equals(todayMdZero)) return true;
+
+        return false;
     }
 
     private int parseOrderNo(String s) {
