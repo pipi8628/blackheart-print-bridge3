@@ -514,7 +514,7 @@ public class MainActivity extends Activity {
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
-        int width = 320;       // 40mm 標籤安全寬度
+        int width = 360;       // 40mm 標籤安全寬度
         int height = 240;      // 30mm 標籤安全高度
         int lineHeight = 38;   // 三行商用版行距
 
@@ -559,7 +559,7 @@ public class MainActivity extends Activity {
             }
 
             float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f - 40;
+            float x = (width - textWidth) / 2f - 50;
 
             if (x < margin) x = margin;
 
