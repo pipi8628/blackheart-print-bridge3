@@ -652,7 +652,7 @@ public class MainActivity extends Activity {
         os.write(data);
         os.flush();
 
-        Thread.sleep(120);
+        Thread.sleep(180);
         os.close();
         socket.close();
     }
