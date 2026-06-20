@@ -487,7 +487,7 @@ public class MainActivity extends Activity {
 
         int y = 45;
         for (String line : lines) {
-            canvas.drawText(line, 70, y, paint);
+            canvas.drawText(line, 40, y, paint);
             y += lineHeight;
         }
         return bitmap;
