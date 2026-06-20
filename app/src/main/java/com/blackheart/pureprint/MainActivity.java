@@ -510,13 +510,13 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(26);
+        paint.setTextSize(28);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
         int width = 320;       // 40mm 標籤安全寬度
         int height = 240;      // 30mm 標籤安全高度
-        int lineHeight = 28;   // 三行商用版行距
+        int lineHeight = 34;   // 三行商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null
@@ -526,7 +526,7 @@ public class MainActivity extends Activity {
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            int margin = 24;
+            int margin = 30;
             lines.addAll(wrapText(line, paint, width - (margin * 2)));
         }
 
@@ -546,7 +546,7 @@ public class MainActivity extends Activity {
 
             float textWidth = bounds.width();
 
-            float x = margin + ((width - (margin * 2)) - textWidth) / 2f - bounds.left;
+            float x = ((width - textWidth) / 2f) - bounds.left;
 
             if (x < margin) x = margin;
 
