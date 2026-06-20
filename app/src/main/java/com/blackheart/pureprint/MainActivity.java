@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 300);
+                handler.postDelayed(this, 120);
             }
         }
     };
@@ -645,14 +645,14 @@ public class MainActivity extends Activity {
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 5000);
-        socket.setSoTimeout(5000);
+        socket.connect(new InetSocketAddress(ip, port), 2000);
+        socket.setSoTimeout(2000);
 
         OutputStream os = socket.getOutputStream();
         os.write(data);
         os.flush();
 
-        Thread.sleep(80);
+        Thread.sleep(30);
         os.close();
         socket.close();
     }
@@ -740,8 +740,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(5000);
-        c.setReadTimeout(5000);
+        c.setConnectTimeout(2500);
+        c.setReadTimeout(2500);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
