@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     private boolean working = false;
     private int printedCount = 0;
     private volatile int ignoreBeforeOrderNo = 0;
+    private volatile int ignoreBeforeRowNo = 0;
     private volatile boolean backgroundClearing = false;
 
     private String lastBaseUrl = "";
@@ -75,7 +76,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版22", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -164,6 +165,8 @@ public class MainActivity extends Activity {
         webAppUrlInput.setText(prefs.getString("webAppUrl", ""));
         printerIpInput.setText(prefs.getString("printerIp", "192.168.31.189"));
         portInput.setText(prefs.getString("port", "9100"));
+        ignoreBeforeOrderNo = prefs.getInt("ignoreBeforeOrderNo", 0);
+        ignoreBeforeRowNo = prefs.getInt("ignoreBeforeRowNo", 0);
     }
 
     private void saveSettings() {
@@ -171,6 +174,8 @@ public class MainActivity extends Activity {
                 .putString("webAppUrl", webAppUrlInput.getText().toString().trim())
                 .putString("printerIp", printerIpInput.getText().toString().trim())
                 .putString("port", portInput.getText().toString().trim())
+                .putInt("ignoreBeforeOrderNo", ignoreBeforeOrderNo)
+                .putInt("ignoreBeforeRowNo", ignoreBeforeRowNo)
                 .apply();
     }
 
@@ -220,7 +225,16 @@ public class MainActivity extends Activity {
                 lastLabelNo = labelNo;
 
                 int currentOrderNo = parseOrderNo(orderNo);
+                int currentRowNo = parseOrderNo(row);
+                boolean isOldOrder = false;
                 if (ignoreBeforeOrderNo > 0 && currentOrderNo > 0 && currentOrderNo <= ignoreBeforeOrderNo) {
+                    isOldOrder = true;
+                }
+                if (ignoreBeforeRowNo > 0 && currentRowNo > 0 && currentRowNo <= ignoreBeforeRowNo) {
+                    isOldOrder = true;
+                }
+
+                if (isOldOrder) {
                     if (row.length() > 0 || id.length() > 0) {
                         httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
                     }
@@ -335,6 +349,7 @@ public class MainActivity extends Activity {
                 if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
 
                 int cutoff = parseOrderNo(lastOrderNo);
+                int cutoffRow = parseOrderNo(lastRow);
 
                 // 先抓目前第一筆待印，當作本次要清掉的舊單界線。
                 try {
@@ -342,15 +357,21 @@ public class MainActivity extends Activity {
                     JSONObject job = new JSONObject(json);
                     if (job.optBoolean("ok", false)) {
                         cutoff = Math.max(cutoff, parseOrderNo(job.optString("orderNo", "")));
+                        cutoffRow = Math.max(cutoffRow, parseOrderNo(job.optString("row", "")));
                     }
                 } catch (Exception ignored) {}
 
-                if (cutoff <= 0) {
-                    ui(() -> status("目前沒有可判斷單號的待印訂單"));
+                if (cutoff <= 0 && cutoffRow <= 0) {
+                    ui(() -> status("目前沒有可判斷單號/列號的待印訂單"));
                     return;
                 }
 
                 ignoreBeforeOrderNo = Math.max(ignoreBeforeOrderNo, cutoff);
+                ignoreBeforeRowNo = Math.max(ignoreBeforeRowNo, cutoffRow);
+                prefs.edit()
+                        .putInt("ignoreBeforeOrderNo", ignoreBeforeOrderNo)
+                        .putInt("ignoreBeforeRowNo", ignoreBeforeRowNo)
+                        .apply();
                 backgroundClearing = true;
 
                 lastBaseUrl = base;
@@ -360,11 +381,12 @@ public class MainActivity extends Activity {
                 lastLabelNo = "";
 
                 final int finalCutoff = ignoreBeforeOrderNo;
-                ui(() -> status("已清空本地待印｜#" + finalCutoff + " 以前背景取消，新單照常印"));
+                final int finalCutoffRow = ignoreBeforeRowNo;
+                ui(() -> status("已清空本地待印｜單號#" + finalCutoff + " / 列" + finalCutoffRow + "以前背景取消，新單照常印"));
 
                 // 後端如果支援 clearAllBefore，優先用真正批次。
                 try {
-                    String clearJson = httpGet(base + "?api=clearAllBefore&orderNo=" + enc(String.valueOf(finalCutoff)));
+                    String clearJson = httpGet(base + "?api=clearAllBefore&orderNo=" + enc(String.valueOf(finalCutoff)) + "&row=" + enc(String.valueOf(finalCutoffRow)));
                     JSONObject clearResult = new JSONObject(clearJson);
                     if (clearResult.optBoolean("ok", false)) {
                         int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
@@ -393,9 +415,11 @@ public class MainActivity extends Activity {
                     String orderNo = job.optString("orderNo", "");
                     String labelNo = job.optString("labelNo", "");
                     int n = parseOrderNo(orderNo);
+                    int r = parseOrderNo(row);
 
                     // 新單不取消，讓監聽流程正常列印。
-                    if (n > 0 && n > finalCutoff) break;
+                    if ((n > 0 && finalCutoff > 0 && n > finalCutoff) ||
+                            (r > 0 && finalCutoffRow > 0 && r > finalCutoffRow)) break;
 
                     if (row.length() == 0 && id.length() == 0) break;
 
