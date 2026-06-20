@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極2圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -149,7 +149,7 @@ public class MainActivity extends Activity {
         e.setSingleLine(false);
         e.setMinLines(1);
         e.setTextColor(Color.BLACK);
-        e.setTextSize(18);
+        e.setTextSize(24);
         e.setBackgroundColor(Color.WHITE);
         e.setPadding(16, 12, 16, 12);
         return e;
@@ -510,13 +510,13 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(36);
+        paint.setTextSize(26);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
-        int width = 340;       // 40mm 標籤安全寬度
+        int width = 320;       // 40mm 標籤安全寬度
         int height = 240;      // 30mm 標籤安全高度
-        int lineHeight = 30;   // 三行商用版行距
+        int lineHeight = 28;   // 三行商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null
@@ -526,19 +526,19 @@ public class MainActivity extends Activity {
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            int margin = 42;
+            int margin = 24;
             lines.addAll(wrapText(line, paint, width - (margin * 2)));
         }
 
         if (lines.size() == 0) lines.add("TEST");
-        while (lines.size() > 3) lines.remove(lines.size() - 1);
+        while (lines.size() > 6) lines.remove(lines.size() - 1);
 
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = 45;
-        int margin = 20;
+        int y = 28;
+        int margin = 24;
 
         for (String line : lines) {
             Rect bounds = new Rect();
