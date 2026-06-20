@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -526,7 +526,8 @@ public class MainActivity extends Activity {
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            lines.addAll(wrapText(line, paint, width - 40));
+            int margin = 20;
+            lines.addAll(wrapText(line, paint, width - (margin * 2)));
         }
 
         if (lines.size() == 0) lines.add("TEST");
@@ -537,12 +538,17 @@ public class MainActivity extends Activity {
         canvas.drawColor(Color.WHITE);
 
         int y = 45;
+        int margin = 20;
+
         for (String line : lines) {
             Rect bounds = new Rect();
             paint.getTextBounds(line, 0, line.length(), bounds);
 
             float textWidth = bounds.width();
-            float x = ((width - textWidth) / 2f - bounds.left) - 52;
+
+            float x = margin + ((width - (margin * 2)) - textWidth) / 2f - bounds.left;
+
+            if (x < margin) x = margin;
 
             canvas.drawText(line, x, y, paint);
             y += lineHeight;
