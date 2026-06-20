@@ -542,13 +542,11 @@ public class MainActivity extends Activity {
 
         for (String line : lines) {
             Rect bounds = new Rect();
-            paint.getTextBounds(line, 0, line.length(), bounds);
+            float textWidth = paint.measureText(line);
 
-            float textWidth = bounds.width();
+float x = (width - textWidth) / 2f - 30;
 
-            float x = ((width - textWidth) / 2f) - bounds.left;
-
-            if (x < margin) x = margin;
+if (x < margin) x = margin;
 
             canvas.drawText(line, x, y, paint);
             y += lineHeight;
