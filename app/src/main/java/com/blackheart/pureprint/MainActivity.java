@@ -30,13 +30,19 @@ public class MainActivity extends Activity {
 
     private EditText webAppUrlInput, printerIpInput, portInput;
     private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn;
+    private Button startBtn, stopBtn, testBtn, skipBtn;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
 
     private boolean running = false;
     private boolean working = false;
     private int printedCount = 0;
+
+    private String lastBaseUrl = "";
+    private String lastRow = "";
+    private String lastId = "";
+    private String lastOrderNo = "";
+    private String lastLabelNo = "";
 
     private final Runnable poller = new Runnable() {
         @Override public void run() {
@@ -66,7 +72,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.0 ZPL 中文字型版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -89,10 +95,12 @@ public class MainActivity extends Activity {
         startBtn = btn("▶️ 開始監聽", Color.rgb(6, 214, 160));
         stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
         testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
+        skipBtn = btn("🗑 略過目前待印", Color.rgb(255, 183, 3));
 
         root.addView(startBtn);
         root.addView(stopBtn);
         root.addView(testBtn);
+        root.addView(skipBtn);
 
         root.addView(label("Log"));
         logText = tv("", 14, Color.WHITE, false);
@@ -105,7 +113,8 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("TEST\nBLACKHEART"));
+        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\n少冰半糖"));
+        skipBtn.setOnClickListener(v -> skipCurrentPending());
 
         setContentView(scroll);
     }
@@ -198,6 +207,12 @@ public class MainActivity extends Activity {
                 String orderNo = job.optString("orderNo", "");
                 String labelNo = job.optString("labelNo", "");
 
+                lastBaseUrl = base;
+                lastRow = row;
+                lastId = id;
+                lastOrderNo = orderNo;
+                lastLabelNo = labelNo;
+
                 String labelText = firstNonEmpty(
                         job.optString("labelText", ""),
                         job.optString("text", ""),
@@ -241,11 +256,61 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void skipCurrentPending() {
+        saveSettings();
+        new Thread(() -> {
+            try {
+                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
+                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
+
+                String row = lastRow;
+                String id = lastId;
+                String orderNo = lastOrderNo;
+                String labelNo = lastLabelNo;
+
+                // 如果目前畫面沒有已讀取的訂單，就主動抓一次 pending 再略過。
+                if ((row == null || row.length() == 0) && (id == null || id.length() == 0)) {
+                    String json = httpGet(base + "?api=pending");
+                    JSONObject job = new JSONObject(json);
+                    if (!job.optBoolean("ok", false)) {
+                        ui(() -> status("沒有待略過訂單"));
+                        return;
+                    }
+                    row = job.optString("row", "");
+                    id = job.optString("id", "");
+                    orderNo = job.optString("orderNo", "");
+                    labelNo = job.optString("labelNo", "");
+                }
+
+                if (row.length() == 0 && id.length() == 0) {
+                    throw new Exception("找不到 row/id，無法標記完成");
+                }
+
+                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+
+                lastBaseUrl = base;
+                lastRow = "";
+                lastId = "";
+                lastOrderNo = "";
+                lastLabelNo = "";
+
+                final String msg = "已略過待印訂單 #" + orderNo + " 第 " + labelNo + " 張";
+                ui(() -> status(msg));
+
+            } catch (Exception ex) {
+                ui(() -> {
+                    status("略過失敗：" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
+
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
             try {
-                String content = text == null ? "" : text.trim();
+                String content = text == null ? "" : text.replace("\r", "").trim();
                 if (content.length() == 0) content = "TEST";
 
                 final String finalContent = content;
@@ -274,7 +339,6 @@ public class MainActivity extends Activity {
     private String buildEzplImage(String text) {
         String content = text == null ? "TEST" : text
                 .replace("\r", "")
-                .replace("\n", " ")
                 .trim();
         if (content.length() == 0) content = "TEST";
 
@@ -302,25 +366,31 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(34);
+        paint.setTextSize(42);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
 
-        int maxWidth = 320;
-        int padding = 16;
-        int lineHeight = 44;
+        int width = 448; // 60mm 標籤保守寬度，56 bytes
+        int padding = 20;
+        int lineHeight = 60;
 
-        java.util.ArrayList<String> lines = wrapText(text, paint, maxWidth - padding * 2);
-        if (lines.size() == 0) lines.add("TEST");
-        if (lines.size() > 5) {
-            while (lines.size() > 5) lines.remove(lines.size() - 1);
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        String[] rawLines = text.replace("\r", "").split("\n");
+        for (String raw : rawLines) {
+            String line = raw == null ? "" : raw.trim();
+            if (line.length() == 0) continue;
+            lines.addAll(wrapText(line, paint, width - padding * 2));
         }
 
+        if (lines.size() == 0) lines.add("TEST");
+        while (lines.size() > 5) lines.remove(lines.size() - 1);
+
         int height = padding * 2 + lineHeight * lines.size();
-        Bitmap bitmap = Bitmap.createBitmap(maxWidth, height, Bitmap.Config.ARGB_8888);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = padding + 34;
+        Paint.FontMetrics fm = paint.getFontMetrics();
+        int y = padding + (int)(-fm.ascent);
         for (String line : lines) {
             canvas.drawText(line, padding, y, paint);
             y += lineHeight;
@@ -360,7 +430,7 @@ public class MainActivity extends Activity {
                 int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
 
                 value <<= 1;
-                if (gray < 160) value |= 1;
+                if (gray < 200) value |= 1;
                 bit++;
 
                 if (bit == 8) {
