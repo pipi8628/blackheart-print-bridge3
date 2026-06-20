@@ -17,6 +17,7 @@ import android.widget.*;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -30,7 +31,7 @@ public class MainActivity extends Activity {
 
     private EditText webAppUrlInput, printerIpInput, portInput;
     private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn, skipBtn;
+    private Button startBtn, stopBtn, testBtn, skipBtn, cancelAllBtn;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
 
@@ -72,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版二", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -96,11 +97,13 @@ public class MainActivity extends Activity {
         stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
         testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
         skipBtn = btn("🗑 略過目前待印", Color.rgb(255, 183, 3));
+        cancelAllBtn = btn("🧹 取消全部待印", Color.rgb(255, 120, 120));
 
         root.addView(startBtn);
         root.addView(stopBtn);
         root.addView(testBtn);
         root.addView(skipBtn);
+        root.addView(cancelAllBtn);
 
         root.addView(label("Log"));
         logText = tv("", 14, Color.WHITE, false);
@@ -115,6 +118,7 @@ public class MainActivity extends Activity {
         stopBtn.setOnClickListener(v -> stop());
         testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\n少冰半糖"));
         skipBtn.setOnClickListener(v -> skipCurrentPending());
+        cancelAllBtn.setOnClickListener(v -> cancelAllPending());
 
         setContentView(scroll);
     }
@@ -226,14 +230,15 @@ public class MainActivity extends Activity {
                 }
 
                 final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
-                final String zpl = buildEzplImage(finalText);
+                final byte[] printData = buildEzplImage(finalText);
+                final String zpl = "EZPL Q IMAGE bytes=" + printData.length;
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
                     log("送出內容:\n" + zpl);
                 });
 
-                sendSocket(zpl);
+                sendSocket(printData);
 
                 if (row.length() > 0 || id.length() > 0) {
                     httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
@@ -306,6 +311,70 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+
+    private void cancelAllPending() {
+        saveSettings();
+        stop();
+        new Thread(() -> {
+            int skipped = 0;
+            try {
+                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
+                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
+
+                java.util.HashSet<String> seen = new java.util.HashSet<>();
+
+                for (int i = 0; i < 100; i++) {
+                    String json = httpGet(base + "?api=pending");
+                    JSONObject job = new JSONObject(json);
+
+                    if (!job.optBoolean("ok", false)) {
+                        break;
+                    }
+
+                    String row = job.optString("row", "");
+                    String id = job.optString("id", "");
+                    String orderNo = job.optString("orderNo", "");
+                    String labelNo = job.optString("labelNo", "");
+                    String key = row + "|" + id;
+
+                    if (row.length() == 0 && id.length() == 0) {
+                        throw new Exception("pending 回傳沒有 row/id，無法取消全部");
+                    }
+
+                    if (seen.contains(key)) {
+                        throw new Exception("同一筆待印無法清除，請檢查 Apps Script 的 api=done 是否有成功寫入");
+                    }
+                    seen.add(key);
+
+                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    skipped++;
+
+                    final int current = skipped;
+                    final String msg = "取消中：已取消 " + current + " 筆｜#" + orderNo + " 第 " + labelNo + " 張";
+                    ui(() -> status(msg));
+
+                    Thread.sleep(250);
+                }
+
+                lastBaseUrl = base;
+                lastRow = "";
+                lastId = "";
+                lastOrderNo = "";
+                lastLabelNo = "";
+
+                final int total = skipped;
+                ui(() -> status("已取消全部待印，共 " + total + " 筆"));
+
+            } catch (Exception ex) {
+                final int total = skipped;
+                ui(() -> {
+                    status("取消全部失敗｜已取消 " + total + " 筆｜" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
+
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
@@ -314,14 +383,15 @@ public class MainActivity extends Activity {
                 if (content.length() == 0) content = "TEST";
 
                 final String finalContent = content;
-                final String zpl = buildEzplImage(finalContent);
+                final byte[] printData = buildEzplImage(finalContent);
+                final String zpl = "EZPL Q IMAGE bytes=" + printData.length;
 
                 ui(() -> {
                     status("列印中...");
                     log("送出內容:\n" + zpl);
                 });
 
-                sendSocket(zpl);
+                sendSocket(printData);
 
                 ui(() -> status("測試列印已送出"));
 
@@ -334,33 +404,30 @@ public class MainActivity extends Activity {
         }).start();
     }
 
-    // DX2 最穩定方案：把中文先畫成 Bitmap，再用 EZPL 圖像指令列印。
-    // 這樣不需要 Big5 / UTF-8 / AH / VF / AZ1，也不依賴印表機中文字型。
-    private String buildEzplImage(String text) {
+    // DX2 圖片列印方案：GoDEX EZPL 圖像不是 GW+HEX，而是 Q 指令 + 原始 bitmap bytes。
+    // 官方 EZPL Pattern command: Qx,y,width,height，後面資料長度 = width(byte) * height(dot)。
+    private byte[] buildEzplImage(String text) throws Exception {
         String content = text == null ? "TEST" : text
                 .replace("\r", "")
                 .trim();
         if (content.length() == 0) content = "TEST";
 
         Bitmap bmp = textToBitmap(content);
-        String hex = bitmapToHex(bmp);
+        byte[] img = bitmapToBytes(bmp);
 
         int widthBytes = (bmp.getWidth() + 7) / 8;
         int height = bmp.getHeight();
 
-        StringBuilder ezpl = new StringBuilder();
-        ezpl.append("^L\r\n");
-        ezpl.append("^H12\r\n");
-        ezpl.append("^Q40,3\r\n");
-        ezpl.append("^W60\r\n");
-        ezpl.append("^1\r\n");
-        ezpl.append("GW,0,0,")
-                .append(widthBytes).append(",")
-                .append(height).append(",")
-                .append(hex)
-                .append("\r\n");
-        ezpl.append("E\r\n");
-        return ezpl.toString();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(("^Q40,3\r\n").getBytes("US-ASCII"));
+        out.write(("^W60\r\n").getBytes("US-ASCII"));
+        out.write(("^H12\r\n").getBytes("US-ASCII"));
+        out.write(("^S2\r\n").getBytes("US-ASCII"));
+        out.write(("^L\r\n").getBytes("US-ASCII"));
+        out.write(("Q40,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
+        out.write(img);
+        out.write(("\r\nE\r\n").getBytes("US-ASCII"));
+        return out.toByteArray();
     }
 
     private Bitmap textToBitmap(String text) {
@@ -369,7 +436,7 @@ public class MainActivity extends Activity {
         paint.setTextSize(42);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
 
-        int width = 448; // 60mm 標籤保守寬度，56 bytes
+        int width = 384; // 48 bytes，保守寬度，避免 DX2 溢出
         int padding = 20;
         int lineHeight = 60;
 
@@ -416,36 +483,30 @@ public class MainActivity extends Activity {
         return lines;
     }
 
-    private String bitmapToHex(Bitmap bmp) {
-        StringBuilder hex = new StringBuilder();
+    private byte[] bitmapToBytes(Bitmap bmp) {
         int width = bmp.getWidth();
         int height = bmp.getHeight();
+        int widthBytes = (width + 7) / 8;
+        byte[] out = new byte[widthBytes * height];
 
+        int idx = 0;
         for (int y = 0; y < height; y++) {
-            int bit = 0;
-            int value = 0;
-
-            for (int x = 0; x < width; x++) {
-                int pixel = bmp.getPixel(x, y);
-                int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
-
-                value <<= 1;
-                if (gray < 200) value |= 1;
-                bit++;
-
-                if (bit == 8) {
-                    hex.append(String.format("%02X", value & 0xFF));
-                    bit = 0;
-                    value = 0;
+            for (int bx = 0; bx < widthBytes; bx++) {
+                int value = 0;
+                for (int bit = 0; bit < 8; bit++) {
+                    int x = bx * 8 + bit;
+                    value <<= 1;
+                    if (x < width) {
+                        int pixel = bmp.getPixel(x, y);
+                        int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
+                        // GoDEX Q pattern: bit=1 印黑點。
+                        if (gray < 200) value |= 1;
+                    }
                 }
-            }
-
-            if (bit > 0) {
-                value <<= (8 - bit);
-                hex.append(String.format("%02X", value & 0xFF));
+                out[idx++] = (byte)(value & 0xFF);
             }
         }
-        return hex.toString();
+        return out;
     }
 
     private String sanitizeZplText(String s) {
@@ -458,7 +519,7 @@ public class MainActivity extends Activity {
                 .trim();
     }
 
-    private void sendSocket(String data) throws Exception {
+    private void sendSocket(byte[] data) throws Exception {
         String ip = printerIpInput.getText().toString().trim();
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
@@ -467,10 +528,10 @@ public class MainActivity extends Activity {
         socket.setSoTimeout(5000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("US-ASCII"));
+        os.write(data);
         os.flush();
 
-        Thread.sleep(1000);
+        Thread.sleep(1200);
         os.close();
         socket.close();
     }
