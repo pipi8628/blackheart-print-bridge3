@@ -514,9 +514,9 @@ public class MainActivity extends Activity {
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
-        int width = 320;       // 40mm 標籤安全寬度
-        int height = 140;      // 30mm 標籤安全高度
-        int lineHeight = 40;   // 三行商用版行距
+        int width = 340;       // 40mm 標籤安全寬度
+        int height = 240;      // 30mm 標籤安全高度
+        int lineHeight = 30;   // 三行商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null
@@ -526,7 +526,7 @@ public class MainActivity extends Activity {
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            int margin = 20;
+            int margin = 42;
             lines.addAll(wrapText(line, paint, width - (margin * 2)));
         }
 
