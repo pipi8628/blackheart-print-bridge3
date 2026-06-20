@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 120);
+                handler.postDelayed(this, 250);
             }
         }
     };
@@ -645,14 +645,14 @@ public class MainActivity extends Activity {
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 2000);
-        socket.setSoTimeout(2000);
+        socket.connect(new InetSocketAddress(ip, port), 3000);
+        socket.setSoTimeout(3000);
 
         OutputStream os = socket.getOutputStream();
         os.write(data);
         os.flush();
 
-        Thread.sleep(30);
+        Thread.sleep(120);
         os.close();
         socket.close();
     }
