@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 500);
+                handler.postDelayed(this, 400);
             }
         }
     };
@@ -571,7 +571,21 @@ canvas.drawText(line, x, y, paint);
 y += lineHeight;
 
         return bitmap;
+    }for (String line : lines) {
+    float textWidth = paint.measureText(line);
+    float x = (width - textWidth) / 2f - 40;
+
+    if (x < margin) x = margin;
+
+    if (x + textWidth > width - margin) {
+        x = width - margin - textWidth;
     }
+
+    canvas.drawText(line, x, y, paint);
+    y += lineHeight;
+}
+
+return bitmap;
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
@@ -639,7 +653,7 @@ y += lineHeight;
         os.write(data);
         os.flush();
 
-        Thread.sleep(300);
+        Thread.sleep(200);
         os.close();
         socket.close();
     }
