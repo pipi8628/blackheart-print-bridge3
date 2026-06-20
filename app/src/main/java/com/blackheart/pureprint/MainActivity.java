@@ -430,40 +430,36 @@ public class MainActivity extends Activity {
         return out.toByteArray();
     }
 
-    private Bitmap textToBitmap(String text) {
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        paint.setColor(Color.BLACK);
-        paint.setTextSize(42);
-        paint.setTypeface(Typeface.DEFAULT_BOLD);
+private Bitmap textToBitmap(String text) {
+    Paint paint = new Paint();
+    paint.setColor(Color.BLACK);
+    paint.setTextSize(34);
+    paint.setAntiAlias(true);
+    paint.setTypeface(Typeface.DEFAULT_BOLD);
 
-        int width = 384; // 48 bytes，保守寬度，避免 DX2 溢出
-        int padding = 20;
-        int lineHeight = 60;
+    String[] lines = text.split("\n");
 
-        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text.replace("\r", "").split("\n");
-        for (String raw : rawLines) {
-            String line = raw == null ? "" : raw.trim();
-            if (line.length() == 0) continue;
-            lines.addAll(wrapText(line, paint, width - padding * 2));
-        }
+    int width = 320;       // 約 40mm
+    int lineHeight = 42;   // 行距縮小
+    int height = 130;      // 約 30mm 高內安全區
 
-        if (lines.size() == 0) lines.add("TEST");
-        while (lines.size() > 5) lines.remove(lines.size() - 1);
+    Bitmap bitmap = Bitmap.createBitmap(
+            width,
+            height,
+            Bitmap.Config.ARGB_8888
+    );
 
-        int height = padding * 2 + lineHeight * lines.size();
-        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        canvas.drawColor(Color.WHITE);
+    Canvas canvas = new Canvas(bitmap);
+    canvas.drawColor(Color.WHITE);
 
-        Paint.FontMetrics fm = paint.getFontMetrics();
-        int y = padding + (int)(-fm.ascent);
-        for (String line : lines) {
-            canvas.drawText(line, padding, y, paint);
-            y += lineHeight;
-        }
-        return bitmap;
+    int y = 38; // 上邊界
+    for (String line : lines) {
+        canvas.drawText(line, 28, y, paint); // 左邊界往右推
+        y += lineHeight;
     }
+
+    return bitmap;
+}
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
