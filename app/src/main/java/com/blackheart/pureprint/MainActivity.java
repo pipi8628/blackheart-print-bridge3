@@ -38,6 +38,8 @@ public class MainActivity extends Activity {
     private boolean running = false;
     private boolean working = false;
     private int printedCount = 0;
+    private volatile int ignoreBeforeOrderNo = 0;
+    private volatile boolean backgroundClearing = false;
 
     private String lastBaseUrl = "";
     private String lastRow = "";
@@ -73,7 +75,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版12", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版22", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -217,6 +219,19 @@ public class MainActivity extends Activity {
                 lastOrderNo = orderNo;
                 lastLabelNo = labelNo;
 
+                int currentOrderNo = parseOrderNo(orderNo);
+                if (ignoreBeforeOrderNo > 0 && currentOrderNo > 0 && currentOrderNo <= ignoreBeforeOrderNo) {
+                    if (row.length() > 0 || id.length() > 0) {
+                        httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    }
+                    final String skippedMsg = "舊單自動略過 #" + orderNo + " 第 " + labelNo + " 張";
+                    ui(() -> {
+                        status(skippedMsg);
+                        working = false;
+                    });
+                    return;
+                }
+
                 String labelText = firstNonEmpty(
                         job.optString("labelText", ""),
                         job.optString("text", ""),
@@ -314,77 +329,29 @@ public class MainActivity extends Activity {
 
     private void cancelAllPending() {
         saveSettings();
-        stop();
         new Thread(() -> {
             try {
                 String base = cleanUrl(webAppUrlInput.getText().toString().trim());
                 if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
 
-                ui(() -> status("正在批次取消全部待印..."));
+                int cutoff = parseOrderNo(lastOrderNo);
 
-                // 優先使用 Apps Script 的批次清除 API：?api=clearAll
-                // 這會比一筆一筆 done 快很多。如果後端尚未支援，會自動退回舊方式。
-                boolean clearAllOk = false;
-                String clearJson = "";
+                // 先抓目前第一筆待印，當作本次要清掉的舊單界線。
                 try {
-                    clearJson = httpGet(base + "?api=clearAll");
-                    JSONObject clearResult = new JSONObject(clearJson);
-                    clearAllOk = clearResult.optBoolean("ok", false);
-
-                    if (clearAllOk) {
-                        int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
-
-                        lastBaseUrl = base;
-                        lastRow = "";
-                        lastId = "";
-                        lastOrderNo = "";
-                        lastLabelNo = "";
-
-                        final String msg = count >= 0
-                                ? "已批次取消全部待印，共 " + count + " 筆"
-                                : "已批次取消全部待印";
-                        ui(() -> status(msg));
-                        return;
-                    }
-                } catch (Exception ignored) {
-                    // 後端還沒有 clearAll 時，會自動改用逐筆取消。
-                }
-
-                ui(() -> status("後端未支援 clearAll，改用逐筆取消..."));
-
-                int skipped = 0;
-                java.util.HashSet<String> seen = new java.util.HashSet<>();
-
-                for (int i = 0; i < 100; i++) {
                     String json = httpGet(base + "?api=pending");
                     JSONObject job = new JSONObject(json);
-
-                    if (!job.optBoolean("ok", false)) {
-                        break;
+                    if (job.optBoolean("ok", false)) {
+                        cutoff = Math.max(cutoff, parseOrderNo(job.optString("orderNo", "")));
                     }
+                } catch (Exception ignored) {}
 
-                    String row = job.optString("row", "");
-                    String id = job.optString("id", "");
-                    String orderNo = job.optString("orderNo", "");
-                    String labelNo = job.optString("labelNo", "");
-                    String key = row + "|" + id;
-
-                    if (row.length() == 0 && id.length() == 0) {
-                        throw new Exception("pending 回傳沒有 row/id，無法取消全部");
-                    }
-
-                    if (seen.contains(key)) {
-                        throw new Exception("同一筆待印無法清除，請檢查 Apps Script 的 api=done 是否有成功寫入");
-                    }
-                    seen.add(key);
-
-                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-                    skipped++;
-
-                    final int current = skipped;
-                    final String msg = "取消中：已取消 " + current + " 筆｜#" + orderNo + " 第 " + labelNo + " 張";
-                    ui(() -> status(msg));
+                if (cutoff <= 0) {
+                    ui(() -> status("目前沒有可判斷單號的待印訂單"));
+                    return;
                 }
+
+                ignoreBeforeOrderNo = Math.max(ignoreBeforeOrderNo, cutoff);
+                backgroundClearing = true;
 
                 lastBaseUrl = base;
                 lastRow = "";
@@ -392,10 +359,64 @@ public class MainActivity extends Activity {
                 lastOrderNo = "";
                 lastLabelNo = "";
 
+                final int finalCutoff = ignoreBeforeOrderNo;
+                ui(() -> status("已清空本地待印｜#" + finalCutoff + " 以前背景取消，新單照常印"));
+
+                // 後端如果支援 clearAllBefore，優先用真正批次。
+                try {
+                    String clearJson = httpGet(base + "?api=clearAllBefore&orderNo=" + enc(String.valueOf(finalCutoff)));
+                    JSONObject clearResult = new JSONObject(clearJson);
+                    if (clearResult.optBoolean("ok", false)) {
+                        int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
+                        backgroundClearing = false;
+                        final String msg = count >= 0
+                                ? "背景已批次取消舊單，共 " + count + " 筆｜新單可正常列印"
+                                : "背景已批次取消舊單｜新單可正常列印";
+                        ui(() -> status(msg));
+                        return;
+                    }
+                } catch (Exception ignored) {
+                    // 後端尚未支援 clearAllBefore，改用背景逐筆 done，但不阻塞新單列印。
+                }
+
+                int skipped = 0;
+                java.util.HashSet<String> seen = new java.util.HashSet<>();
+
+                for (int i = 0; i < 200; i++) {
+                    String json = httpGet(base + "?api=pending");
+                    JSONObject job = new JSONObject(json);
+
+                    if (!job.optBoolean("ok", false)) break;
+
+                    String row = job.optString("row", "");
+                    String id = job.optString("id", "");
+                    String orderNo = job.optString("orderNo", "");
+                    String labelNo = job.optString("labelNo", "");
+                    int n = parseOrderNo(orderNo);
+
+                    // 新單不取消，讓監聽流程正常列印。
+                    if (n > 0 && n > finalCutoff) break;
+
+                    if (row.length() == 0 && id.length() == 0) break;
+
+                    String key = row + "|" + id;
+                    if (seen.contains(key)) break;
+                    seen.add(key);
+
+                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    skipped++;
+
+                    final int current = skipped;
+                    final String msg = "背景取消舊單中：已取消 " + current + " 筆｜#" + orderNo + " 第 " + labelNo + " 張";
+                    ui(() -> status(msg));
+                }
+
+                backgroundClearing = false;
                 final int total = skipped;
-                ui(() -> status("已取消全部待印，共 " + total + " 筆"));
+                ui(() -> status("背景取消完成，共 " + total + " 筆｜新單可正常列印"));
 
             } catch (Exception ex) {
+                backgroundClearing = false;
                 ui(() -> {
                     status("取消全部失敗：" + ex.getMessage());
                     log(ex.toString());
@@ -467,14 +488,14 @@ public class MainActivity extends Activity {
         paint.setFakeBoldText(true);
 
         int width = 320;       // 40mm 標籤安全寬度
-        int height = 140;      // 30mm 標籤安全高度，避免第三行被切
+        int height = 140;      // 30mm 標籤安全高度
         int lineHeight = 40;   // 三行商用版行距
 
-     java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        String[] rawLines = text == null
+                ? new String[]{"TEST"}
+                : text.replace("\r", "").split("\n");
 
-String[] rawLines = text == null
-        ? new String[]{"TEST"}
-        : text.replace("\r", "").split("\n");
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
@@ -490,17 +511,19 @@ String[] rawLines = text == null
 
         int y = 45;
         for (String line : lines) {
-Rect bounds = new Rect();
-paint.getTextBounds(line, 0, line.length(), bounds);
+            Rect bounds = new Rect();
+            paint.getTextBounds(line, 0, line.length(), bounds);
 
-float textWidth = bounds.width();
-float x = ((width - textWidth) / 2f - bounds.left) - 52;
+            float textWidth = bounds.width();
+            float x = ((width - textWidth) / 2f - bounds.left) - 52;
 
-canvas.drawText(line, x, y, paint);
-y += lineHeight;
-}
-return bitmap;
-}
+            canvas.drawText(line, x, y, paint);
+            y += lineHeight;
+        }
+
+        return bitmap;
+    }
+
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -596,6 +619,21 @@ return bitmap;
             }
         }
         return sb.toString().trim();
+    }
+
+    private int parseOrderNo(String s) {
+        if (s == null) return 0;
+        StringBuilder digits = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c >= '0' && c <= '9') digits.append(c);
+        }
+        if (digits.length() == 0) return 0;
+        try {
+            return Integer.parseInt(digits.toString());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private String httpGet(String urlText) throws Exception {
