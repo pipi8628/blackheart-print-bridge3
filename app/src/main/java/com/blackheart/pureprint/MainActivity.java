@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 800);
+                handler.postDelayed(this, 500);
             }
         }
     };
@@ -516,7 +516,7 @@ public class MainActivity extends Activity {
 
         int width = 320;       // 40mm 標籤安全寬度
         int height = 240;      // 30mm 標籤安全高度
-        int lineHeight = 34;   // 三行商用版行距
+        int lineHeight = 38;   // 三行商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null
@@ -537,7 +537,7 @@ public class MainActivity extends Activity {
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = 28;
+        int y = 44;
         int margin = 24;
 
         for (String line : lines) {
@@ -559,7 +559,7 @@ public class MainActivity extends Activity {
             }
 
             float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f - 30;
+            float x = (width - textWidth) / 2f - 40;
             if (x < margin) x = margin;
 
             canvas.drawText(line, x, y, paint);
