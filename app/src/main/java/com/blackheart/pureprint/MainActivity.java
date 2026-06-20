@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版四", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版五", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -419,8 +419,8 @@ public class MainActivity extends Activity {
         int height = bmp.getHeight();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(("^Q40,3\r\n").getBytes("US-ASCII"));
-        out.write(("^W60\r\n").getBytes("US-ASCII"));
+        out.write(("^Q30,3\r\n").getBytes("US-ASCII"));
+        out.write(("^W40\r\n").getBytes("US-ASCII"));
         out.write(("^H12\r\n").getBytes("US-ASCII"));
         out.write(("^S2\r\n").getBytes("US-ASCII"));
         out.write(("^L\r\n").getBytes("US-ASCII"));
