@@ -7,12 +7,12 @@ import android.os.Looper;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.Rect;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.ScrollView;
-import android.widget.TextView;
+import android.widget.*;
 
 import org.json.JSONObject;
 
@@ -30,12 +30,19 @@ public class MainActivity extends Activity {
 
     private EditText webAppUrlInput, printerIpInput, portInput;
     private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn;
+    private Button startBtn, stopBtn, testBtn, skipBtn;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
+
     private boolean running = false;
     private boolean working = false;
     private int printedCount = 0;
+
+    private String lastBaseUrl = "";
+    private String lastRow = "";
+    private String lastId = "";
+    private String lastOrderNo = "";
+    private String lastLabelNo = "";
 
     private final Runnable poller = new Runnable() {
         @Override public void run() {
@@ -47,8 +54,8 @@ public class MainActivity extends Activity {
     };
 
     @Override
-    public void onCreate(Bundle b) {
-        super.onCreate(b);
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
         loadSettings();
@@ -65,12 +72,12 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ 黑心純列印 V4.0 ZPL Big5 VF版", 28, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
 
-        countText = tv("已列印：0", 32, Color.WHITE, true);
+        countText = tv("已列印：0", 34, Color.rgb(190, 220, 255), true);
         root.addView(countText);
 
         root.addView(label("Apps Script Web App 網址"));
@@ -87,11 +94,13 @@ public class MainActivity extends Activity {
 
         startBtn = btn("▶️ 開始監聽", Color.rgb(6, 214, 160));
         stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
-        testBtn = btn("🧪 測試列印", Color.rgb(0, 150, 255));
+        testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
+        skipBtn = btn("🗑 略過目前待印", Color.rgb(255, 183, 3));
 
         root.addView(startBtn);
         root.addView(stopBtn);
         root.addView(testBtn);
+        root.addView(skipBtn);
 
         root.addView(label("Log"));
         logText = tv("", 14, Color.WHITE, false);
@@ -104,7 +113,8 @@ public class MainActivity extends Activity {
 
         startBtn.setOnClickListener(v -> start());
         stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> testPrint());
+        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\n少冰半糖"));
+        skipBtn.setOnClickListener(v -> skipCurrentPending());
 
         setContentView(scroll);
     }
@@ -126,7 +136,8 @@ public class MainActivity extends Activity {
     private EditText input(String hint) {
         EditText e = new EditText(this);
         e.setHint(hint);
-        e.setSingleLine(true);
+        e.setSingleLine(false);
+        e.setMinLines(1);
         e.setTextColor(Color.BLACK);
         e.setTextSize(18);
         e.setBackgroundColor(Color.WHITE);
@@ -171,10 +182,6 @@ public class MainActivity extends Activity {
         status("已停止");
     }
 
-    private void testPrint() {
-        printText("TEST\nBLACKHEART\n梅粉\n煉乳+可可粉\n$60");
-    }
-
     private void pollOnce() {
         if (working) return;
         working = true;
@@ -189,7 +196,7 @@ public class MainActivity extends Activity {
 
                 if (!job.optBoolean("ok", false)) {
                     ui(() -> {
-                        status("監聽中｜沒有待列印貼紙");
+                        statusText.setText("監聽中｜沒有待列印貼紙");
                         working = false;
                     });
                     return;
@@ -200,13 +207,26 @@ public class MainActivity extends Activity {
                 String orderNo = job.optString("orderNo", "");
                 String labelNo = job.optString("labelNo", "");
 
-                String labelText = job.optString("labelText", "");
-                if (labelText.length() == 0) labelText = job.optString("text", "");
-                if (labelText.length() == 0) labelText = job.optString("tspl", "");
-                if (labelText.length() == 0) labelText = "#" + orderNo + "-" + labelNo;
+                lastBaseUrl = base;
+                lastRow = row;
+                lastId = id;
+                lastOrderNo = orderNo;
+                lastLabelNo = labelNo;
 
-                final String finalText = stripOldCommands(labelText);
-                final String zpl = buildZpl(finalText);
+                String labelText = firstNonEmpty(
+                        job.optString("labelText", ""),
+                        job.optString("text", ""),
+                        job.optString("content", ""),
+                        job.optString("plain", "")
+                );
+
+                if (labelText.length() == 0) {
+                    String old = firstNonEmpty(job.optString("zpl", ""), job.optString("tspl", ""), job.optString("ezpl", ""));
+                    labelText = extractReadableText(old);
+                }
+
+                final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
+                final String zpl = buildEzplImage(finalText);
 
                 ui(() -> {
                     status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
@@ -214,7 +234,10 @@ public class MainActivity extends Activity {
                 });
 
                 sendSocket(zpl);
-                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+
+                if (row.length() > 0 || id.length() > 0) {
+                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                }
 
                 printedCount++;
                 ui(() -> {
@@ -233,15 +256,65 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void skipCurrentPending() {
+        saveSettings();
+        new Thread(() -> {
+            try {
+                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
+                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
+
+                String row = lastRow;
+                String id = lastId;
+                String orderNo = lastOrderNo;
+                String labelNo = lastLabelNo;
+
+                // 如果目前畫面沒有已讀取的訂單，就主動抓一次 pending 再略過。
+                if ((row == null || row.length() == 0) && (id == null || id.length() == 0)) {
+                    String json = httpGet(base + "?api=pending");
+                    JSONObject job = new JSONObject(json);
+                    if (!job.optBoolean("ok", false)) {
+                        ui(() -> status("沒有待略過訂單"));
+                        return;
+                    }
+                    row = job.optString("row", "");
+                    id = job.optString("id", "");
+                    orderNo = job.optString("orderNo", "");
+                    labelNo = job.optString("labelNo", "");
+                }
+
+                if (row.length() == 0 && id.length() == 0) {
+                    throw new Exception("找不到 row/id，無法標記完成");
+                }
+
+                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+
+                lastBaseUrl = base;
+                lastRow = "";
+                lastId = "";
+                lastOrderNo = "";
+                lastLabelNo = "";
+
+                final String msg = "已略過待印訂單 #" + orderNo + " 第 " + labelNo + " 張";
+                ui(() -> status(msg));
+
+            } catch (Exception ex) {
+                ui(() -> {
+                    status("略過失敗：" + ex.getMessage());
+                    log(ex.toString());
+                });
+            }
+        }).start();
+    }
+
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
             try {
-                String content = text == null ? "" : text.trim();
+                String content = text == null ? "" : text.replace("\r", "").trim();
                 if (content.length() == 0) content = "TEST";
 
-                final String finalContent = stripOldCommands(content);
-                final String zpl = buildZpl(finalContent);
+                final String finalContent = content;
+                final String zpl = buildEzplImage(finalContent);
 
                 ui(() -> {
                     status("列印中...");
@@ -250,81 +323,139 @@ public class MainActivity extends Activity {
 
                 sendSocket(zpl);
 
-                ui(() -> {
-                    status("測試列印已送出");
-                    log("已送到印表機");
-                });
+                ui(() -> status("測試列印已送出"));
 
             } catch (Exception ex) {
                 ui(() -> {
-                    status("列印失敗：" + ex.getMessage());
+                    status("測試失敗：" + ex.getMessage());
                     log(ex.toString());
                 });
             }
         }).start();
     }
 
-    private String buildZpl(String text) {
-        String[] rawLines = text.replace("\r", "").split("\n");
-        StringBuilder zpl = new StringBuilder();
+    // DX2 最穩定方案：把中文先畫成 Bitmap，再用 EZPL 圖像指令列印。
+    // 這樣不需要 Big5 / UTF-8 / AH / VF / AZ1，也不依賴印表機中文字型。
+    private String buildEzplImage(String text) {
+        String content = text == null ? "TEST" : text
+                .replace("\r", "")
+                .trim();
+        if (content.length() == 0) content = "TEST";
 
-        zpl.append("^XA\n");
-        zpl.append("^CI17\n");
-        zpl.append("^PW320\n");
-        zpl.append("^LL240\n");
+        Bitmap bmp = textToBitmap(content);
+        String hex = bitmapToHex(bmp);
 
-        int y = 20;
-        int printed = 0;
+        int widthBytes = (bmp.getWidth() + 7) / 8;
+        int height = bmp.getHeight();
 
-        for (String line : rawLines) {
-            String safe = sanitizeZplText(line);
-            if (safe.length() == 0) continue;
-            if (printed >= 9) break;
-
-            zpl.append("^FO20,").append(y)
-                    .append("^A@N,30,30,VF^FD")
-                    .append(safe)
-                    .append("\"\n");
-
-            y += 42;
-            printed++;
-        }
-
-        zpl.append("PRINT\n");
-        return zpl.toString();
+        StringBuilder ezpl = new StringBuilder();
+        ezpl.append("^L\r\n");
+        ezpl.append("^H12\r\n");
+        ezpl.append("^Q40,3\r\n");
+        ezpl.append("^W60\r\n");
+        ezpl.append("^1\r\n");
+        ezpl.append("GW,0,0,")
+                .append(widthBytes).append(",")
+                .append(height).append(",")
+                .append(hex)
+                .append("\r\n");
+        ezpl.append("E\r\n");
+        return ezpl.toString();
     }
 
-    private String sanitizeZplText(String text) {
-        if (text == null) return "";
-        return text.replace("^", "")
+    private Bitmap textToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(42);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+
+        int width = 448; // 60mm 標籤保守寬度，56 bytes
+        int padding = 20;
+        int lineHeight = 60;
+
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        String[] rawLines = text.replace("\r", "").split("\n");
+        for (String raw : rawLines) {
+            String line = raw == null ? "" : raw.trim();
+            if (line.length() == 0) continue;
+            lines.addAll(wrapText(line, paint, width - padding * 2));
+        }
+
+        if (lines.size() == 0) lines.add("TEST");
+        while (lines.size() > 5) lines.remove(lines.size() - 1);
+
+        int height = padding * 2 + lineHeight * lines.size();
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        Paint.FontMetrics fm = paint.getFontMetrics();
+        int y = padding + (int)(-fm.ascent);
+        for (String line : lines) {
+            canvas.drawText(line, padding, y, paint);
+            y += lineHeight;
+        }
+        return bitmap;
+    }
+
+    private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        StringBuilder current = new StringBuilder();
+
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            String next = current.toString() + ch;
+            if (paint.measureText(next) > maxWidth && current.length() > 0) {
+                lines.add(current.toString());
+                current.setLength(0);
+            }
+            current.append(ch);
+        }
+
+        if (current.length() > 0) lines.add(current.toString());
+        return lines;
+    }
+
+    private String bitmapToHex(Bitmap bmp) {
+        StringBuilder hex = new StringBuilder();
+        int width = bmp.getWidth();
+        int height = bmp.getHeight();
+
+        for (int y = 0; y < height; y++) {
+            int bit = 0;
+            int value = 0;
+
+            for (int x = 0; x < width; x++) {
+                int pixel = bmp.getPixel(x, y);
+                int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
+
+                value <<= 1;
+                if (gray < 200) value |= 1;
+                bit++;
+
+                if (bit == 8) {
+                    hex.append(String.format("%02X", value & 0xFF));
+                    bit = 0;
+                    value = 0;
+                }
+            }
+
+            if (bit > 0) {
+                value <<= (8 - bit);
+                hex.append(String.format("%02X", value & 0xFF));
+            }
+        }
+        return hex.toString();
+    }
+
+    private String sanitizeZplText(String s) {
+        if (s == null) return "";
+        return s
+                .replace("^", "")
                 .replace("~", "")
-                .replace("\\", "")
-                .replace("\"", "")
                 .replace("\r", "")
                 .replace("\n", "")
                 .trim();
-    }
-
-    private String stripOldCommands(String text) {
-        if (text == null) return "";
-        String[] lines = text.replace("\r", "").split("\n");
-        StringBuilder clean = new StringBuilder();
-
-        for (String line : lines) {
-            String s = line.trim();
-            if (s.length() == 0) continue;
-            if (s.startsWith("^")) continue;
-            if (s.startsWith("~")) continue;
-            if (s.startsWith("AA,")) continue;
-            if (s.equalsIgnoreCase("E")) continue;
-            if (s.equalsIgnoreCase("PRINT")) continue;
-            if (s.equalsIgnoreCase("FORM")) continue;
-            if (s.toUpperCase().contains("PURE PRINT")) continue;
-            if (s.toUpperCase().contains("NO ARCORE")) continue;
-            clean.append(s).append("\n");
-        }
-
-        return clean.toString().trim();
     }
 
     private void sendSocket(String data) throws Exception {
@@ -332,15 +463,42 @@ public class MainActivity extends Activity {
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 3000);
+        socket.connect(new InetSocketAddress(ip, port), 5000);
+        socket.setSoTimeout(5000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("Big5"));
+        os.write(data.getBytes("US-ASCII"));
         os.flush();
 
-        Thread.sleep(300);
+        Thread.sleep(1000);
         os.close();
         socket.close();
+    }
+
+    private String firstNonEmpty(String... values) {
+        if (values == null) return "";
+        for (String v : values) {
+            if (v != null && v.trim().length() > 0) return v.trim();
+        }
+        return "";
+    }
+
+    // 如果後端還回傳舊 EZPL，先盡量把可讀文字抽出來。
+    private String extractReadableText(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder();
+        String[] lines = raw.replace("\r", "").split("\n");
+        for (String line : lines) {
+            String t = line.trim();
+            if (t.length() == 0) continue;
+            if (t.startsWith("^") || t.startsWith("~") || t.equals("E")) continue;
+            int idx = t.lastIndexOf(",");
+            if (idx >= 0 && idx < t.length() - 1) {
+                String tail = t.substring(idx + 1).replace("\"", "").trim();
+                if (tail.length() > 0) sb.append(tail).append("\n");
+            }
+        }
+        return sb.toString().trim();
     }
 
     private String httpGet(String urlText) throws Exception {
@@ -353,7 +511,6 @@ public class MainActivity extends Activity {
 
         InputStream in = c.getInputStream();
         BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = br.readLine()) != null) sb.append(line);
@@ -363,6 +520,7 @@ public class MainActivity extends Activity {
 
     private String cleanUrl(String s) {
         if (s == null) return "";
+        s = s.trim();
         if (s.endsWith("?")) return s.substring(0, s.length() - 1);
         if (s.endsWith("&")) return s.substring(0, s.length() - 1);
         return s;
@@ -372,7 +530,9 @@ public class MainActivity extends Activity {
         return URLEncoder.encode(s == null ? "" : s, "UTF-8");
     }
 
-    private void ui(Runnable r) { handler.post(r); }
+    private void ui(Runnable r) {
+        handler.post(r);
+    }
 
     private void status(String s) {
         statusText.setText(s);
