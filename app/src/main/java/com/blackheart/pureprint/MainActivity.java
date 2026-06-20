@@ -494,10 +494,9 @@ Rect bounds = new Rect();
 paint.getTextBounds(line, 0, line.length(), bounds);
 
 float textWidth = bounds.width();
-float x = (width - textWidth) / 2f - bounds.left;
+float x = ((width - textWidth) / 2f - bounds.left) - 21;
 
 canvas.drawText(line, x, y, paint);
-
 y += lineHeight;
 }
 return bitmap;
