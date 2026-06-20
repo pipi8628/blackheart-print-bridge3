@@ -367,7 +367,10 @@ public class MainActivity extends Activity {
                 }
 
                 ignoreBeforeOrderNo = Math.max(ignoreBeforeOrderNo, cutoff);
-                ignoreBeforeRowNo = Math.max(ignoreBeforeRowNo, cutoffRow);
+                // 嚴格清除模式：清除期間先暫時擋掉所有目前 pending，避免舊單被 poller 撿回去印。
+                // 背景清完後會把 ignoreBeforeRowNo 改回實際清到的最大 row。
+                int originalIgnoreBeforeRowNo = ignoreBeforeRowNo;
+                ignoreBeforeRowNo = 999999999;
                 prefs.edit()
                         .putInt("ignoreBeforeOrderNo", ignoreBeforeOrderNo)
                         .putInt("ignoreBeforeRowNo", ignoreBeforeRowNo)
@@ -390,6 +393,8 @@ public class MainActivity extends Activity {
                     JSONObject clearResult = new JSONObject(clearJson);
                     if (clearResult.optBoolean("ok", false)) {
                         int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
+                        ignoreBeforeRowNo = Math.max(originalIgnoreBeforeRowNo, finalCutoffRow);
+                        prefs.edit().putInt("ignoreBeforeRowNo", ignoreBeforeRowNo).apply();
                         backgroundClearing = false;
                         final String msg = count >= 0
                                 ? "背景已批次取消舊單，共 " + count + " 筆｜新單可正常列印"
@@ -402,6 +407,7 @@ public class MainActivity extends Activity {
                 }
 
                 int skipped = 0;
+                int maxClearedRow = originalIgnoreBeforeRowNo;
                 java.util.HashSet<String> seen = new java.util.HashSet<>();
 
                 for (int i = 0; i < 200; i++) {
@@ -416,10 +422,10 @@ public class MainActivity extends Activity {
                     String labelNo = job.optString("labelNo", "");
                     int n = parseOrderNo(orderNo);
                     int r = parseOrderNo(row);
+                    if (r > maxClearedRow) maxClearedRow = r;
 
-                    // 新單不取消，讓監聽流程正常列印。
-                    if ((n > 0 && finalCutoff > 0 && n > finalCutoff) ||
-                            (r > 0 && finalCutoffRow > 0 && r > finalCutoffRow)) break;
+                    // APK 單機嚴格模式：因 pending API 只吐一筆，無法可靠分辨「清除期間的新單」。
+                    // 所以這裡會把當下持續吐出的 pending 全部 done 到清空為止，避免舊單回印。
 
                     if (row.length() == 0 && id.length() == 0) break;
 
@@ -435,9 +441,12 @@ public class MainActivity extends Activity {
                     ui(() -> status(msg));
                 }
 
+                ignoreBeforeRowNo = maxClearedRow;
+                prefs.edit().putInt("ignoreBeforeRowNo", ignoreBeforeRowNo).apply();
                 backgroundClearing = false;
                 final int total = skipped;
-                ui(() -> status("背景取消完成，共 " + total + " 筆｜新單可正常列印"));
+                final int finalMaxClearedRow = maxClearedRow;
+                ui(() -> status("背景取消完成，共 " + total + " 筆｜已略過到 row " + finalMaxClearedRow));
 
             } catch (Exception ex) {
                 backgroundClearing = false;
