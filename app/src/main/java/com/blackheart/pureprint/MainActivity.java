@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 1000);
+                handler.postDelayed(this, 1500);
             }
         }
     };
@@ -621,7 +621,7 @@ if (x < margin) x = margin;
         os.write(data);
         os.flush();
 
-        Thread.sleep(200);
+        Thread.sleep(500);
         os.close();
         socket.close();
     }
