@@ -495,12 +495,12 @@ paint.getTextBounds(line, 0, line.length(), bounds);
 
 float textWidth = bounds.width();
 float x = (width - textWidth) / 2f - bounds.left;
+
 canvas.drawText(line, x, y, paint);
-    canvas.drawText(line, x, y, paint);
-    y += lineHeight;
+
+y += lineHeight;
 }
-        return bitmap;
-    }
+return bitmap;
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
