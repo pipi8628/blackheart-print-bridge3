@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 2000);
+                handler.postDelayed(this, 500);
             }
         }
     };
@@ -621,7 +621,7 @@ if (x < margin) x = margin;
         os.write(data);
         os.flush();
 
-        Thread.sleep(1200);
+        Thread.sleep(200);
         os.close();
         socket.close();
     }
@@ -709,8 +709,8 @@ if (x < margin) x = margin;
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
+        c.setConnectTimeout(1000);
+        c.setReadTimeout(1500);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
