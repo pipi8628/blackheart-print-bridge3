@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版十", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版12", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
