@@ -614,8 +614,8 @@ if (x < margin) x = margin;
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 5000);
-        socket.setSoTimeout(5000);
+        socket.connect(new InetSocketAddress(ip, port), 8000);
+        socket.setSoTimeout(8000);
 
         OutputStream os = socket.getOutputStream();
         os.write(data);
