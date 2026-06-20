@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版八", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版十", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -467,15 +467,17 @@ public class MainActivity extends Activity {
         paint.setFakeBoldText(true);
 
         int width = 320;       // 40mm 標籤安全寬度
-        int height = 140;      // 30mm 標籤安全高度
-        int lineHeight = 40;   // 商用版行距
+        int height = 140;      // 30mm 標籤安全高度，避免第三行被切
+        int lineHeight = 40;   // 三行商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("
+", "").split("
+");
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            lines.addAll(wrapText(line, paint, width - 52));
+            lines.addAll(wrapText(line, paint, width - 40));
         }
 
         if (lines.size() == 0) lines.add("TEST");
@@ -487,7 +489,9 @@ public class MainActivity extends Activity {
 
         int y = 45;
         for (String line : lines) {
-            canvas.drawText(line, 30, y, paint);
+            float textWidth = paint.measureText(line);
+            float x = (width - textWidth) / 2f;
+            canvas.drawText(line, x, y, paint);
             y += lineHeight;
         }
         return bitmap;
