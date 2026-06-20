@@ -723,8 +723,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(1000);
-        c.setReadTimeout(1500);
+        c.setConnectTimeout(6000);
+        c.setReadTimeout(6000);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
