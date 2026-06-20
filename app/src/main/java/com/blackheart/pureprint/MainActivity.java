@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版五", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版七", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -433,12 +433,12 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(28);
+        paint.setTextSize(34);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
 
         int width = 320;       // 40mm 標籤安全寬度
         int height = 110;      // 30mm 標籤安全高度
-        int lineHeight = 34;   // 三行用，避免太擠或跨紙
+        int lineHeight = 38;   // 商用版行距
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
@@ -455,9 +455,9 @@ public class MainActivity extends Activity {
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = 42;
+        int y = 55;
         for (String line : lines) {
-            canvas.drawText(line, 26, y, paint);
+            canvas.drawText(line, 55, y, paint);
             y += lineHeight;
         }
         return bitmap;
