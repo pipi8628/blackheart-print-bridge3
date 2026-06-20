@@ -501,7 +501,7 @@ canvas.drawText(line, x, y, paint);
 y += lineHeight;
 }
 return bitmap;
-
+}
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         StringBuilder current = new StringBuilder();
