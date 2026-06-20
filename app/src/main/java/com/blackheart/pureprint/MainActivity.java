@@ -558,13 +558,17 @@ public class MainActivity extends Activity {
                 paint.setFakeBoldText(true);
             }
 
-            float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f - 40;
-            if (x < margin) x = margin;
+           float textWidth = paint.measureText(line);
+float x = (width - textWidth) / 2f - 40;
 
-            canvas.drawText(line, x, y, paint);
-            y += lineHeight;
-        }
+if (x < margin) x = margin;
+
+if (x + textWidth > width - margin) {
+    x = width - margin - textWidth;
+}
+
+canvas.drawText(line, x, y, paint);
+y += lineHeight;
 
         return bitmap;
     }
