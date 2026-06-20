@@ -470,10 +470,11 @@ public class MainActivity extends Activity {
         int height = 140;      // 30mm 標籤安全高度，避免第三行被切
         int lineHeight = 40;   // 三行商用版行距
 
-        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("
-", "").split("
-");
+     java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+
+String[] rawLines = text == null
+        ? new String[]{"TEST"}
+        : text.replace("\r", "").split("\n");
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
