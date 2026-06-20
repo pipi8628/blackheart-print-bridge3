@@ -490,8 +490,12 @@ String[] rawLines = text == null
 
         int y = 45;
         for (String line : lines) {
-    float textWidth = paint.measureText(line);
-    float x = ((width - textWidth) / 2f) - 12;
+Rect bounds = new Rect();
+paint.getTextBounds(line, 0, line.length(), bounds);
+
+float textWidth = bounds.width();
+float x = (width - textWidth) / 2f - bounds.left;
+canvas.drawText(line, x, y, paint);
     canvas.drawText(line, x, y, paint);
     y += lineHeight;
 }
