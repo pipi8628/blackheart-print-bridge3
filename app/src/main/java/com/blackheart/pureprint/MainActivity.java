@@ -548,8 +548,29 @@ float x = (width - textWidth) / 2f - 30;
 
 if (x < margin) x = margin;
 
-            canvas.drawText(line, x, y, paint);
-            y += lineHeight;
+           if (line.startsWith("NO.")) {
+    paint.setTextSize(40);   // 號碼放大
+    paint.setFakeBoldText(true);
+} else if (line.matches("\\d{2}/\\d{2}.*")) {
+    paint.setTextSize(18);   // 時間縮小
+    paint.setFakeBoldText(false);
+} else if (line.contains("・")) {
+    paint.setTextSize(26);   // 無糖・少冰 同一行
+    paint.setFakeBoldText(true);
+} else if (line.startsWith("$")) {
+    paint.setTextSize(34);   // 價格放大
+    paint.setFakeBoldText(true);
+} else {
+    paint.setTextSize(30);   // 品名正常
+    paint.setFakeBoldText(true);
+}
+
+float textWidth = paint.measureText(line);
+float x = (width - textWidth) / 2f - 20;
+if (x < margin) x = margin;
+
+canvas.drawText(line, x, y, paint);
+y += lineHeight;
         }
 
         return bitmap;
