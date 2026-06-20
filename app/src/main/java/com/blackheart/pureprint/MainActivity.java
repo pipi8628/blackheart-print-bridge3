@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 400);
+                handler.postDelayed(this, 300);
             }
         }
     };
@@ -264,7 +264,14 @@ public class MainActivity extends Activity {
                 sendSocket(printData);
 
                 if (row.length() > 0 || id.length() > 0) {
-                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    final String doneBase = base;
+                    final String doneRow = row;
+                    final String doneId = id;
+                    new Thread(() -> {
+                        try {
+                            httpGet(doneBase + "?api=done&row=" + enc(doneRow) + "&id=" + enc(doneId));
+                        } catch (Exception ignored) {}
+                    }).start();
                 }
 
                 printedCount++;
@@ -501,7 +508,7 @@ public class MainActivity extends Activity {
         out.write(("^H12\r\n").getBytes("US-ASCII"));
         out.write(("^S2\r\n").getBytes("US-ASCII"));
         out.write(("^L\r\n").getBytes("US-ASCII"));
-        out.write(("Q40,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
+        out.write(("Q0,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
         out.write(img);
         out.write(("\r\nE\r\n").getBytes("US-ASCII"));
         return out.toByteArray();
@@ -514,7 +521,7 @@ public class MainActivity extends Activity {
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
-        int width = 360;       // 40mm 標籤安全寬度
+        int width = 320;       // 40mm 標籤安全寬度（203dpi約320點，避免右邊被裁切）
         int height = 240;      // 30mm 標籤安全高度
         int lineHeight = 38;   // 三行商用版行距
 
@@ -527,7 +534,7 @@ public class MainActivity extends Activity {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
             int margin = 30;
-            lines.addAll(wrapText(line, paint, width - (margin * 2)));
+            lines.addAll(wrapText(line, paint, width - (margin * 3)));
         }
 
         if (lines.size() == 0) lines.add("TEST");
@@ -559,13 +566,18 @@ public class MainActivity extends Activity {
             }
 
             float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f - 50;
+            float x = (width - textWidth) / 2f - 20;
 
+            // 左邊安全邊界
             if (x < margin) x = margin;
 
+            // 右邊安全邊界：長品名自動往左收，不裁字
             if (x + textWidth > width - margin) {
                 x = width - margin - textWidth;
             }
+
+            // 如果文字真的比安全寬度還長，保留左邊界並讓 wrapText 提早換行處理
+            if (x < margin) x = margin;
 
             canvas.drawText(line, x, y, paint);
             y += lineHeight;
@@ -633,14 +645,14 @@ public class MainActivity extends Activity {
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
         Socket socket = new Socket();
-        socket.connect(new InetSocketAddress(ip, port), 8000);
-        socket.setSoTimeout(8000);
+        socket.connect(new InetSocketAddress(ip, port), 5000);
+        socket.setSoTimeout(5000);
 
         OutputStream os = socket.getOutputStream();
         os.write(data);
         os.flush();
 
-        Thread.sleep(200);
+        Thread.sleep(80);
         os.close();
         socket.close();
     }
@@ -728,8 +740,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(6000);
-        c.setReadTimeout(6000);
+        c.setConnectTimeout(5000);
+        c.setReadTimeout(5000);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
