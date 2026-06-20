@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版七", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版八", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -316,11 +316,43 @@ public class MainActivity extends Activity {
         saveSettings();
         stop();
         new Thread(() -> {
-            int skipped = 0;
             try {
                 String base = cleanUrl(webAppUrlInput.getText().toString().trim());
                 if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
 
+                ui(() -> status("正在批次取消全部待印..."));
+
+                // 優先使用 Apps Script 的批次清除 API：?api=clearAll
+                // 這會比一筆一筆 done 快很多。如果後端尚未支援，會自動退回舊方式。
+                boolean clearAllOk = false;
+                String clearJson = "";
+                try {
+                    clearJson = httpGet(base + "?api=clearAll");
+                    JSONObject clearResult = new JSONObject(clearJson);
+                    clearAllOk = clearResult.optBoolean("ok", false);
+
+                    if (clearAllOk) {
+                        int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
+
+                        lastBaseUrl = base;
+                        lastRow = "";
+                        lastId = "";
+                        lastOrderNo = "";
+                        lastLabelNo = "";
+
+                        final String msg = count >= 0
+                                ? "已批次取消全部待印，共 " + count + " 筆"
+                                : "已批次取消全部待印";
+                        ui(() -> status(msg));
+                        return;
+                    }
+                } catch (Exception ignored) {
+                    // 後端還沒有 clearAll 時，會自動改用逐筆取消。
+                }
+
+                ui(() -> status("後端未支援 clearAll，改用逐筆取消..."));
+
+                int skipped = 0;
                 java.util.HashSet<String> seen = new java.util.HashSet<>();
 
                 for (int i = 0; i < 100; i++) {
@@ -352,8 +384,6 @@ public class MainActivity extends Activity {
                     final int current = skipped;
                     final String msg = "取消中：已取消 " + current + " 筆｜#" + orderNo + " 第 " + labelNo + " 張";
                     ui(() -> status(msg));
-
-                    Thread.sleep(250);
                 }
 
                 lastBaseUrl = base;
@@ -366,9 +396,8 @@ public class MainActivity extends Activity {
                 ui(() -> status("已取消全部待印，共 " + total + " 筆"));
 
             } catch (Exception ex) {
-                final int total = skipped;
                 ui(() -> {
-                    status("取消全部失敗｜已取消 " + total + " 筆｜" + ex.getMessage());
+                    status("取消全部失敗：" + ex.getMessage());
                     log(ex.toString());
                 });
             }
@@ -433,8 +462,9 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(34);
+        paint.setTextSize(42);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
 
         int width = 320;       // 40mm 標籤安全寬度
         int height = 110;      // 30mm 標籤安全高度
@@ -498,7 +528,7 @@ public class MainActivity extends Activity {
                         int pixel = bmp.getPixel(x, y);
                         int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
                         // GoDEX Q pattern: bit=1 印黑點。
-                        if (gray < 200) value |= 1;
+                        if (gray < 230) value |= 1;
                     }
                 }
                 out[idx++] = (byte)(value & 0xFF);
