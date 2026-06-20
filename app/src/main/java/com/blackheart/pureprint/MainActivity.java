@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 1000);
+                handler.postDelayed(this, 800);
             }
         }
     };
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極3圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極2圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -541,36 +541,29 @@ public class MainActivity extends Activity {
         int margin = 24;
 
         for (String line : lines) {
-            Rect bounds = new Rect();
+            if (line.startsWith("NO.")) {
+                paint.setTextSize(40);   // 號碼放大
+                paint.setFakeBoldText(true);
+            } else if (line.matches("\\d{2}/\\d{2}.*")) {
+                paint.setTextSize(18);   // 時間縮小，例如 06/21 03:21
+                paint.setFakeBoldText(false);
+            } else if (line.contains("・")) {
+                paint.setTextSize(26);   // 無糖・少冰 同一行
+                paint.setFakeBoldText(true);
+            } else if (line.startsWith("$")) {
+                paint.setTextSize(34);   // 價格放大
+                paint.setFakeBoldText(true);
+            } else {
+                paint.setTextSize(30);   // 品名正常
+                paint.setFakeBoldText(true);
+            }
+
             float textWidth = paint.measureText(line);
+            float x = (width - textWidth) / 2f - 30;
+            if (x < margin) x = margin;
 
-float x = (width - textWidth) / 2f - 30;
-
-if (x < margin) x = margin;
-
-           if (line.startsWith("NO.")) {
-    paint.setTextSize(40);   // 號碼放大
-    paint.setFakeBoldText(true);
-} else if (line.matches("\\d{2}/\\d{2}.*")) {
-    paint.setTextSize(18);   // 時間縮小
-    paint.setFakeBoldText(false);
-} else if (line.contains("・")) {
-    paint.setTextSize(26);   // 無糖・少冰 同一行
-    paint.setFakeBoldText(true);
-} else if (line.startsWith("$")) {
-    paint.setTextSize(34);   // 價格放大
-    paint.setFakeBoldText(true);
-} else {
-    paint.setTextSize(30);   // 品名正常
-    paint.setFakeBoldText(true);
-}
-
-float textWidth = paint.measureText(line);
-float x = (width - textWidth) / 2f - 20;
-if (x < margin) x = margin;
-
-canvas.drawText(line, x, y, paint);
-y += lineHeight;
+            canvas.drawText(line, x, y, paint);
+            y += lineHeight;
         }
 
         return bitmap;
@@ -730,8 +723,8 @@ y += lineHeight;
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(6000);
-        c.setReadTimeout(6000);
+        c.setConnectTimeout(1000);
+        c.setReadTimeout(1500);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
