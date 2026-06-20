@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版三", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版四", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -419,12 +419,12 @@ public class MainActivity extends Activity {
         int height = bmp.getHeight();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(("^Q30,3\r\n").getBytes("US-ASCII"));
-        out.write(("^W40\r\n").getBytes("US-ASCII"));
+        out.write(("^Q40,3\r\n").getBytes("US-ASCII"));
+        out.write(("^W60\r\n").getBytes("US-ASCII"));
         out.write(("^H12\r\n").getBytes("US-ASCII"));
         out.write(("^S2\r\n").getBytes("US-ASCII"));
         out.write(("^L\r\n").getBytes("US-ASCII"));
-        out.write(("Q0,0," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
+        out.write(("Q40,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
         out.write(img);
         out.write(("\r\nE\r\n").getBytes("US-ASCII"));
         return out.toByteArray();
@@ -433,23 +433,19 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(34);
+        paint.setTextSize(28);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
 
-        // 40mm x 30mm 標籤專用：203dpi 約 320 dots 寬。
-        // 高度先壓到 110 dots，避免第三行跨到下一張。
-        int width = 320;
-        int height = 110;
-        int startX = 40;
-        int startY = 28;
-        int lineHeight = 32;
+        int width = 320;       // 40mm 標籤安全寬度
+        int height = 110;      // 30mm 標籤安全高度
+        int lineHeight = 34;   // 三行用，避免太擠或跨紙
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text.replace("\r", "").split("\n");
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
         for (String raw : rawLines) {
             String line = raw == null ? "" : raw.trim();
             if (line.length() == 0) continue;
-            lines.add(line);
+            lines.addAll(wrapText(line, paint, width - 52));
         }
 
         if (lines.size() == 0) lines.add("TEST");
@@ -459,9 +455,9 @@ public class MainActivity extends Activity {
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = startY;
+        int y = 42;
         for (String line : lines) {
-            canvas.drawText(line, startX, y, paint);
+            canvas.drawText(line, 26, y, paint);
             y += lineHeight;
         }
         return bitmap;
