@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 250);
+                handler.postDelayed(this, 300);
             }
         }
     };
@@ -652,7 +652,7 @@ public class MainActivity extends Activity {
         os.write(data);
         os.flush();
 
-        Thread.sleep(180);
+        Thread.sleep(200);
         os.close();
         socket.close();
     }
@@ -740,8 +740,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(2500);
-        c.setReadTimeout(2500);
+        c.setConnectTimeout(3000);
+        c.setReadTimeout(3000);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
