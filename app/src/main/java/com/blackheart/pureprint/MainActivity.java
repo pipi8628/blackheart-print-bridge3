@@ -490,11 +490,11 @@ String[] rawLines = text == null
 
         int y = 45;
         for (String line : lines) {
-            float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f;
-            canvas.drawText(line, x, y, paint);
-            y += lineHeight;
-        }
+    float textWidth = paint.measureText(line);
+    float x = ((width - textWidth) / 2f) - 12;
+    canvas.drawText(line, x, y, paint);
+    y += lineHeight;
+}
         return bitmap;
     }
 
