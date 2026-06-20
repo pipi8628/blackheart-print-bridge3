@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版二", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版三", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -419,47 +419,53 @@ public class MainActivity extends Activity {
         int height = bmp.getHeight();
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        out.write(("^Q40,3\r\n").getBytes("US-ASCII"));
-        out.write(("^W60\r\n").getBytes("US-ASCII"));
+        out.write(("^Q30,3\r\n").getBytes("US-ASCII"));
+        out.write(("^W40\r\n").getBytes("US-ASCII"));
         out.write(("^H12\r\n").getBytes("US-ASCII"));
         out.write(("^S2\r\n").getBytes("US-ASCII"));
         out.write(("^L\r\n").getBytes("US-ASCII"));
-        out.write(("Q40,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
+        out.write(("Q0,0," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
         out.write(img);
         out.write(("\r\nE\r\n").getBytes("US-ASCII"));
         return out.toByteArray();
     }
 
-private Bitmap textToBitmap(String text) {
-    Paint paint = new Paint();
-    paint.setColor(Color.BLACK);
-    paint.setTextSize(34);
-    paint.setAntiAlias(true);
-    paint.setTypeface(Typeface.DEFAULT_BOLD);
+    private Bitmap textToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTextSize(34);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
 
-    String[] lines = text.split("\n");
+        // 40mm x 30mm 標籤專用：203dpi 約 320 dots 寬。
+        // 高度先壓到 110 dots，避免第三行跨到下一張。
+        int width = 320;
+        int height = 110;
+        int startX = 40;
+        int startY = 28;
+        int lineHeight = 32;
 
-    int width = 320;       // 約 40mm
-    int lineHeight = 42;   // 行距縮小
-    int height = 130;      // 約 30mm 高內安全區
+        java.util.ArrayList<String> lines = new java.util.ArrayList<>();
+        String[] rawLines = text.replace("\r", "").split("\n");
+        for (String raw : rawLines) {
+            String line = raw == null ? "" : raw.trim();
+            if (line.length() == 0) continue;
+            lines.add(line);
+        }
 
-    Bitmap bitmap = Bitmap.createBitmap(
-            width,
-            height,
-            Bitmap.Config.ARGB_8888
-    );
+        if (lines.size() == 0) lines.add("TEST");
+        while (lines.size() > 3) lines.remove(lines.size() - 1);
 
-    Canvas canvas = new Canvas(bitmap);
-    canvas.drawColor(Color.WHITE);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
 
-    int y = 38; // 上邊界
-    for (String line : lines) {
-        canvas.drawText(line, 28, y, paint); // 左邊界往右推
-        y += lineHeight;
+        int y = startY;
+        for (String line : lines) {
+            canvas.drawText(line, startX, y, paint);
+            y += lineHeight;
+        }
+        return bitmap;
     }
-
-    return bitmap;
-}
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
