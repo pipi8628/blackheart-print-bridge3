@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 1500);
+                handler.postDelayed(this, 1000);
             }
         }
     };
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極2圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 終極3圖片列印版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -621,7 +621,7 @@ if (x < margin) x = margin;
         os.write(data);
         os.flush();
 
-        Thread.sleep(500);
+        Thread.sleep(300);
         os.close();
         socket.close();
     }
