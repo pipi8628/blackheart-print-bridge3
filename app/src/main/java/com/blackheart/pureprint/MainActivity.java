@@ -50,12 +50,14 @@ public class MainActivity extends Activity {
     private String lastId = "";
     private String lastOrderNo = "";
     private String lastLabelNo = "";
+    private final java.util.HashSet<String> recentDoneKeys = new java.util.HashSet<>();
+    private final java.util.ArrayList<String> recentDoneOrder = new java.util.ArrayList<>();
 
     private final Runnable poller = new Runnable() {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 250);
+                handler.postDelayed(this, 120);
             }
         }
     };
@@ -79,7 +81,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 平衡速度版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 營業穩定快版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -230,6 +232,15 @@ public class MainActivity extends Activity {
                 String orderNo = job.optString("orderNo", "");
                 String labelNo = job.optString("labelNo", "");
 
+                String currentKey = row + "|" + id;
+                if (currentKey.trim().length() > 1 && recentDoneKeys.contains(currentKey)) {
+                    ui(() -> {
+                        statusText.setText("已略過重複待印 #" + orderNo + " 第 " + labelNo + " 張");
+                        working = false;
+                    });
+                    return;
+                }
+
                 lastBaseUrl = base;
                 lastRow = row;
                 lastId = id;
@@ -280,8 +291,9 @@ public class MainActivity extends Activity {
                     try {
                         httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
                     } catch (Exception doneEx) {
-                        throw new Exception("done timeout/失敗：" + doneEx.getMessage());
+                        log("done timeout 忽略（可能已成功）：" + doneEx.getMessage());
                     }
+                    rememberDoneKey(row + "|" + id);
                 }
 
                 printedCount++;
@@ -299,6 +311,16 @@ public class MainActivity extends Activity {
                 });
             }
         }).start();
+    }
+
+    private void rememberDoneKey(String key) {
+        if (key == null || key.trim().length() <= 1) return;
+        recentDoneKeys.add(key);
+        recentDoneOrder.add(key);
+        while (recentDoneOrder.size() > 80) {
+            String old = recentDoneOrder.remove(0);
+            recentDoneKeys.remove(old);
+        }
     }
 
     private void skipCurrentPending() {
