@@ -263,15 +263,10 @@ public class MainActivity extends Activity {
 
                 sendSocket(printData);
 
+                // 穩定版：列印完成後先同步標記 done，再放開 working。
+                // 避免 done 還沒完成時下一輪 poll 又抓到同一張，造成重印或印完跳 timeout。
                 if (row.length() > 0 || id.length() > 0) {
-                    final String doneBase = base;
-                    final String doneRow = row;
-                    final String doneId = id;
-                    new Thread(() -> {
-                        try {
-                            httpGet(doneBase + "?api=done&row=" + enc(doneRow) + "&id=" + enc(doneId));
-                        } catch (Exception ignored) {}
-                    }).start();
+                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
                 }
 
                 printedCount++;
