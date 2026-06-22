@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 350);
+                handler.postDelayed(this, 250);
             }
         }
     };
@@ -209,7 +209,11 @@ public class MainActivity extends Activity {
                 try {
                     json = httpGet(base + "?api=pending");
                 } catch (Exception pendingEx) {
-                    throw new Exception("pending timeout/失敗：" + pendingEx.getMessage());
+                    ui(() -> {
+                        status("等待 Apps Script 回應中...");
+                        working = false;
+                    });
+                    return;
                 }
                 JSONObject job = new JSONObject(json);
 
@@ -808,7 +812,7 @@ public class MainActivity extends Activity {
         os.write(data);
         os.flush();
 
-        Thread.sleep(350);
+        Thread.sleep(250);
         os.close();
         socket.close();
     }
@@ -896,8 +900,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
+        c.setConnectTimeout(5000);
+        c.setReadTimeout(5000);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
