@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 平衡速度版2", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 平衡速度版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -521,6 +521,26 @@ public class MainActivity extends Activity {
     }
 
     private Bitmap textToBitmap(String text) {
+        String content = text == null ? "TEST" : text.replace("\r", "").trim();
+        if (content.length() == 0) content = "TEST";
+
+        String[] rawLines = content.split("\n");
+        String first = "";
+        for (String s : rawLines) {
+            if (s != null && s.trim().length() > 0 && !s.trim().equals("---")) {
+                first = s.trim();
+                break;
+            }
+        }
+
+        if (first.startsWith("D.")) {
+            return drinkTextToBitmap(content);
+        }
+
+        return normalTextToBitmap(content);
+    }
+
+    private Bitmap normalTextToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
@@ -607,6 +627,119 @@ public class MainActivity extends Activity {
         }
 
         return bitmap;
+    }
+
+    private Bitmap drinkTextToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
+
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+
+        java.util.ArrayList<String> raw = new java.util.ArrayList<>();
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
+        for (String s : rawLines) {
+            String line = s == null ? "" : s.trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+            raw.add(line);
+        }
+        if (raw.size() == 0) raw.add("D.");
+
+        String header = raw.get(0);
+        String price = "";
+        int p = header.lastIndexOf("$");
+        if (p >= 0) {
+            price = header.substring(p).trim();
+            header = header.substring(0, p).trim();
+        }
+        header = normalizeDrinkHeader(header);
+
+        String time = "";
+        java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
+        for (int i = 1; i < raw.size(); i++) {
+            String line = raw.get(i);
+            if (line.matches("\\d{2}/\\d{2}.*")) {
+                time = line;
+            } else if (line.startsWith("$")) {
+                price = line;
+            } else {
+                itemLines.add(line);
+            }
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        // 第一行：D.流水號（若有地瓜球，顯示 8號）
+        paint.setTextSize(34);
+        paint.setFakeBoldText(true);
+        float headWidth = paint.measureText(header);
+        float headX = (width - headWidth) / 2f;
+        if (headX < margin) headX = margin;
+        if (headX + headWidth > width - margin) headX = width - margin - headWidth;
+        canvas.drawText(header, headX, 48, paint);
+
+        // 中間品項：置中大字，最多 4 行
+        int y = 96;
+        for (int i = 0; i < itemLines.size() && i < 4; i++) {
+            String line = itemLines.get(i);
+            if (line.contains("・")) line = line.replace("・", " / ");
+
+            if (line.startsWith("+")) {
+                paint.setTextSize(28);
+            } else if (i == 0) {
+                paint.setTextSize(34);
+            } else {
+                paint.setTextSize(30);
+            }
+
+            java.util.ArrayList<String> wrapped = wrapText(line, paint, width - (margin * 2));
+            for (String w : wrapped) {
+                if (y > 175) break;
+                float tw = paint.measureText(w);
+                float x = (width - tw) / 2f;
+                if (x < margin) x = margin;
+                if (x + tw > width - margin) x = width - margin - tw;
+                canvas.drawText(w, x, y, paint);
+                y += 36;
+            }
+        }
+
+        // 底部左：時間小字
+        if (time.length() > 0) {
+            paint.setTextSize(19);
+            paint.setFakeBoldText(true);
+            canvas.drawText(time, margin, height - 20, paint);
+        }
+
+        // 底部右：價錢中字
+        if (price.length() > 0) {
+            paint.setTextSize(30);
+            paint.setFakeBoldText(true);
+            float pw = paint.measureText(price);
+            canvas.drawText(price, width - margin - pw, height - 20, paint);
+        }
+
+        return bitmap;
+    }
+
+    private String normalizeDrinkHeader(String header) {
+        if (header == null) return "";
+        String h = header.trim();
+
+        // D.15 (8) → D.15 (8號)
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\((\\d+)\\)");
+        java.util.regex.Matcher m = p.matcher(h);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            m.appendReplacement(sb, "(" + m.group(1) + "號)");
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
