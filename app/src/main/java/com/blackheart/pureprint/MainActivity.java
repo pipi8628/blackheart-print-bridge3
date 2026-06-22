@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 500);
+                handler.postDelayed(this, 350);
             }
         }
     };
@@ -79,7 +79,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 穩定防漏版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 平衡速度版2", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -205,7 +205,12 @@ public class MainActivity extends Activity {
                 String base = cleanUrl(webAppUrlInput.getText().toString().trim());
                 if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
 
-                String json = httpGet(base + "?api=pending");
+                String json;
+                try {
+                    json = httpGet(base + "?api=pending");
+                } catch (Exception pendingEx) {
+                    throw new Exception("pending timeout/失敗：" + pendingEx.getMessage());
+                }
                 JSONObject job = new JSONObject(json);
 
                 if (!job.optBoolean("ok", false)) {
@@ -261,12 +266,18 @@ public class MainActivity extends Activity {
                     log("送出內容:\n" + zpl);
                 });
 
-                sendSocket(printData);
+                try {
+                    sendSocket(printData);
+                } catch (Exception printEx) {
+                    throw new Exception("列印 socket timeout/失敗：" + printEx.getMessage());
+                }
 
-                // 穩定版：列印完成後先同步標記 done，再放開 working。
-                // 避免 done 還沒完成時下一輪 poll 又抓到同一張，造成重印或印完跳 timeout。
                 if (row.length() > 0 || id.length() > 0) {
-                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    try {
+                        httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
+                    } catch (Exception doneEx) {
+                        throw new Exception("done timeout/失敗：" + doneEx.getMessage());
+                    }
                 }
 
                 printedCount++;
@@ -664,7 +675,7 @@ public class MainActivity extends Activity {
         os.write(data);
         os.flush();
 
-        Thread.sleep(300);
+        Thread.sleep(350);
         os.close();
         socket.close();
     }
@@ -752,8 +763,8 @@ public class MainActivity extends Activity {
     private String httpGet(String urlText) throws Exception {
         URL url = new URL(urlText);
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(3000);
-        c.setReadTimeout(3000);
+        c.setConnectTimeout(8000);
+        c.setReadTimeout(8000);
         c.setRequestMethod("GET");
         c.setInstanceFollowRedirects(true);
 
