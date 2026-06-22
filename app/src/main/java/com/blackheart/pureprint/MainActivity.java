@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 300);
+                handler.postDelayed(this, 250);
             }
         }
     };
@@ -517,24 +517,30 @@ public class MainActivity extends Activity {
     private Bitmap textToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(28);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setFakeBoldText(true);
 
-        int width = 320;       // 40mm 標籤安全寬度（203dpi約320點，避免右邊被裁切）
-        int height = 240;      // 30mm 標籤安全高度
-        int lineHeight = 38;   // 三行商用版行距
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+        int y = 46;
+        int lineHeight = 42;
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         String[] rawLines = text == null
                 ? new String[]{"TEST"}
                 : text.replace("\r", "").split("\n");
 
-        for (String raw : rawLines) {
-            String line = raw == null ? "" : raw.trim();
-            if (line.length() == 0) continue;
-            int margin = 30;
-            lines.addAll(wrapText(line, paint, width - (margin * 3)));
+        for (int i = 0; i < rawLines.length; i++) {
+            String line = rawLines[i] == null ? "" : rawLines[i].trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+
+            if (line.contains("$") || line.matches("\\d{2}/\\d{2}.*")) {
+                lines.add(line);
+            } else {
+                paint.setTextSize(34);
+                lines.addAll(wrapText(line, paint, width - (margin * 3)));
+            }
         }
 
         if (lines.size() == 0) lines.add("TEST");
@@ -544,43 +550,54 @@ public class MainActivity extends Activity {
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        int y = 44;
-        int margin = 24;
-
         for (String line : lines) {
-            if (line.startsWith("NO.")) {
-                paint.setTextSize(40);   // 號碼放大
+            boolean isHeader = line.contains("$");
+            boolean isTime = line.matches("\\d{2}/\\d{2}.*");
+
+            if (isHeader) {
+                String left = line;
+                String price = "";
+                int p = line.lastIndexOf("$");
+                if (p >= 0) {
+                    left = line.substring(0, p).trim();
+                    price = line.substring(p).trim();
+                }
+
+                paint.setTextSize(34);
                 paint.setFakeBoldText(true);
-            } else if (line.matches("\\d{2}/\\d{2}.*")) {
-                paint.setTextSize(18);   // 時間縮小，例如 06/21 03:21
-                paint.setFakeBoldText(false);
-            } else if (line.contains("・")) {
-                paint.setTextSize(26);   // 無糖・少冰 同一行
+                canvas.drawText(left, margin, y, paint);
+
+                if (price.length() > 0) {
+                    float priceWidth = paint.measureText(price);
+                    canvas.drawText(price, width - margin - priceWidth, y, paint);
+                }
+                y += 48;
+                continue;
+            }
+
+            if (isTime) {
+                paint.setTextSize(18);
                 paint.setFakeBoldText(true);
-            } else if (line.startsWith("$")) {
-                paint.setTextSize(34);   // 價格放大
+            } else if (line.contains("・") || line.startsWith("+")) {
+                paint.setTextSize(26);
                 paint.setFakeBoldText(true);
             } else {
-                paint.setTextSize(30);   // 品名正常
+                paint.setTextSize(34);
                 paint.setFakeBoldText(true);
             }
 
             float textWidth = paint.measureText(line);
-            float x = (width - textWidth) / 2f - 20;
-
-            // 左邊安全邊界
+            float x = (width - textWidth) / 2f;
+            if (x < margin) x = margin;
+            if (x + textWidth > width - margin) x = width - margin - textWidth;
             if (x < margin) x = margin;
 
-            // 右邊安全邊界：長品名自動往左收，不裁字
-            if (x + textWidth > width - margin) {
-                x = width - margin - textWidth;
+            if (isTime && y < height - 22) {
+                y = Math.max(y, height - 24);
             }
 
-            // 如果文字真的比安全寬度還長，保留左邊界並讓 wrapText 提早換行處理
-            if (x < margin) x = margin;
-
             canvas.drawText(line, x, y, paint);
-            y += lineHeight;
+            y += isTime ? 24 : lineHeight;
         }
 
         return bitmap;
@@ -652,7 +669,7 @@ public class MainActivity extends Activity {
         os.write(data);
         os.flush();
 
-        Thread.sleep(200);
+        Thread.sleep(180);
         os.close();
         socket.close();
     }
