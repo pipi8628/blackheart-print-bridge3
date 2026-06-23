@@ -50,14 +50,18 @@ public class MainActivity extends Activity {
     private String lastId = "";
     private String lastOrderNo = "";
     private String lastLabelNo = "";
-    private final java.util.HashSet<String> recentDoneKeys = new java.util.HashSet<>();
-    private final java.util.ArrayList<String> recentDoneOrder = new java.util.ArrayList<>();
+    private static final int POLL_FAST_MS = 120;
+    private static final int POLL_IDLE_MS = 1500;
+    private static final int POLL_TIMEOUT_MS = 3000;
+    private static final int POLL_COOLDOWN_MS = 10000;
+    private int nextPollDelayMs = POLL_IDLE_MS;
+    private int pendingTimeoutCount = 0;
 
     private final Runnable poller = new Runnable() {
         @Override public void run() {
             if (running) {
                 pollOnce();
-                handler.postDelayed(this, 120);
+                handler.postDelayed(this, nextPollDelayMs);
             }
         }
     };
@@ -81,7 +85,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 營業穩定快版", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 智慧待機版0623", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -187,7 +191,7 @@ public class MainActivity extends Activity {
     private void start() {
         saveSettings();
         running = true;
-        status("監聽中...");
+        status("待機中｜1.5秒輪詢");
         handler.removeCallbacks(poller);
         handler.post(poller);
     }
@@ -210,9 +214,17 @@ public class MainActivity extends Activity {
                 String json;
                 try {
                     json = httpGet(base + "?api=pending");
+                    pendingTimeoutCount = 0;
                 } catch (Exception pendingEx) {
+                    pendingTimeoutCount++;
+                    nextPollDelayMs = pendingTimeoutCount >= 5 ? POLL_COOLDOWN_MS : POLL_TIMEOUT_MS;
                     ui(() -> {
-                        status("等待 Apps Script 回應中...");
+                        if (pendingTimeoutCount >= 5) {
+                            status("Google 忙碌多次｜10秒後恢復");
+                            pendingTimeoutCount = 0;
+                        } else {
+                            status("Google 忙碌｜3秒後重試");
+                        }
                         working = false;
                     });
                     return;
@@ -220,8 +232,9 @@ public class MainActivity extends Activity {
                 JSONObject job = new JSONObject(json);
 
                 if (!job.optBoolean("ok", false)) {
+                    nextPollDelayMs = POLL_IDLE_MS;
                     ui(() -> {
-                        statusText.setText("監聽中｜沒有待列印貼紙");
+                        statusText.setText("待機中｜1.5秒輪詢");
                         working = false;
                     });
                     return;
@@ -231,15 +244,6 @@ public class MainActivity extends Activity {
                 String id = job.optString("id", "");
                 String orderNo = job.optString("orderNo", "");
                 String labelNo = job.optString("labelNo", "");
-
-                String currentKey = row + "|" + id;
-                if (currentKey.trim().length() > 1 && recentDoneKeys.contains(currentKey)) {
-                    ui(() -> {
-                        statusText.setText("已略過重複待印 #" + orderNo + " 第 " + labelNo + " 張");
-                        working = false;
-                    });
-                    return;
-                }
 
                 lastBaseUrl = base;
                 lastRow = row;
@@ -276,8 +280,9 @@ public class MainActivity extends Activity {
                 final byte[] printData = buildEzplImage(finalText);
                 final String zpl = "EZPL Q IMAGE bytes=" + printData.length;
 
+                nextPollDelayMs = POLL_FAST_MS;
                 ui(() -> {
-                    status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
+                    status("列印中｜高速模式 #" + orderNo + " 第 " + labelNo + " 張");
                     log("送出內容:\n" + zpl);
                 });
 
@@ -293,13 +298,12 @@ public class MainActivity extends Activity {
                     } catch (Exception doneEx) {
                         log("done timeout 忽略（可能已成功）：" + doneEx.getMessage());
                     }
-                    rememberDoneKey(row + "|" + id);
                 }
 
                 printedCount++;
                 ui(() -> {
                     countText.setText("已列印：" + printedCount);
-                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張");
+                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張｜高速續印");
                     working = false;
                 });
 
@@ -311,16 +315,6 @@ public class MainActivity extends Activity {
                 });
             }
         }).start();
-    }
-
-    private void rememberDoneKey(String key) {
-        if (key == null || key.trim().length() <= 1) return;
-        recentDoneKeys.add(key);
-        recentDoneOrder.add(key);
-        while (recentDoneOrder.size() > 80) {
-            String old = recentDoneOrder.remove(0);
-            recentDoneKeys.remove(old);
-        }
     }
 
     private void skipCurrentPending() {
