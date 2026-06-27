@@ -50,10 +50,10 @@ public class MainActivity extends Activity {
     private String lastId = "";
     private String lastOrderNo = "";
     private String lastLabelNo = "";
-    private static final int POLL_FAST_MS = 120;
-    private static final int POLL_IDLE_MS = 1500;
-    private static final int POLL_TIMEOUT_MS = 3000;
-    private static final int POLL_COOLDOWN_MS = 10000;
+    private static final int POLL_FAST_MS = 150;
+    private static final int POLL_IDLE_MS = 1000;
+    private static final int POLL_TIMEOUT_MS = 2000;
+    private static final int POLL_COOLDOWN_MS = 5000;
     private int nextPollDelayMs = POLL_IDLE_MS;
     private int pendingTimeoutCount = 0;
 
@@ -85,7 +85,7 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 智慧待機版0623", 26, Color.WHITE, true));
+        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 V4.9 快準版", 26, Color.WHITE, true));
 
         statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
@@ -191,7 +191,7 @@ public class MainActivity extends Activity {
     private void start() {
         saveSettings();
         running = true;
-        status("待機中｜1.5秒輪詢");
+        status("待機中｜1秒輪詢");
         handler.removeCallbacks(poller);
         handler.post(poller);
     }
@@ -217,13 +217,13 @@ public class MainActivity extends Activity {
                     pendingTimeoutCount = 0;
                 } catch (Exception pendingEx) {
                     pendingTimeoutCount++;
-                    nextPollDelayMs = pendingTimeoutCount >= 5 ? POLL_COOLDOWN_MS : POLL_TIMEOUT_MS;
+                    nextPollDelayMs = pendingTimeoutCount >= 3 ? POLL_COOLDOWN_MS : POLL_TIMEOUT_MS;
                     ui(() -> {
-                        if (pendingTimeoutCount >= 5) {
-                            status("Google 忙碌多次｜10秒後恢復");
+                        if (pendingTimeoutCount >= 3) {
+                            status("Google 忙碌多次｜5秒後恢復");
                             pendingTimeoutCount = 0;
                         } else {
-                            status("Google 忙碌｜3秒後重試");
+                            status("Google 忙碌｜2秒後重試");
                         }
                         working = false;
                     });
@@ -234,7 +234,7 @@ public class MainActivity extends Activity {
                 if (!job.optBoolean("ok", false)) {
                     nextPollDelayMs = POLL_IDLE_MS;
                     ui(() -> {
-                        statusText.setText("待機中｜1.5秒輪詢");
+                        statusText.setText("待機中｜1秒輪詢");
                         working = false;
                     });
                     return;
@@ -282,14 +282,14 @@ public class MainActivity extends Activity {
 
                 nextPollDelayMs = POLL_FAST_MS;
                 ui(() -> {
-                    status("列印中｜高速模式 #" + orderNo + " 第 " + labelNo + " 張");
+                    status("列印中｜快準模式 #" + orderNo + " 第 " + labelNo + " 張");
                     log("送出內容:\n" + zpl);
                 });
 
                 try {
-                    sendSocket(printData);
+                    sendSocketWithRetry(printData, orderNo, labelNo);
                 } catch (Exception printEx) {
-                    throw new Exception("列印 socket timeout/失敗：" + printEx.getMessage());
+                    throw new Exception("列印 socket 失敗：" + printEx.getMessage());
                 }
 
                 if (row.length() > 0 || id.length() > 0) {
@@ -303,7 +303,7 @@ public class MainActivity extends Activity {
                 printedCount++;
                 ui(() -> {
                     countText.setText("已列印：" + printedCount);
-                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張｜高速續印");
+                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張｜快準續印");
                     working = false;
                 });
 
@@ -485,6 +485,42 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+
+    private void sendSocketWithRetry(byte[] printData, String orderNo, String labelNo) throws Exception {
+        Exception last = null;
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            try {
+                sendSocket(printData);
+
+                // GoDEX DX2 連續圖像列印需要一點緩衝；太快會偶發少張。
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException ignored) {}
+
+                if (attempt > 1) {
+                    final int okAttempt = attempt;
+                    ui(() -> log("重試成功 #" + orderNo + " 第 " + labelNo + " 張｜第 " + okAttempt + " 次"));
+                }
+
+                return;
+            } catch (Exception ex) {
+                last = ex;
+                final int failAttempt = attempt;
+                ui(() -> {
+                    status("列印忙碌｜同張重試 " + failAttempt + "/3");
+                    log("列印 socket 失敗，準備重試同張 #" + orderNo + " 第 " + labelNo + " 張：" + ex.getMessage());
+                });
+
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException ignored) {}
+            }
+        }
+
+        throw new Exception("列印 socket 失敗，已重試 3 次：" + (last == null ? "" : last.getMessage()));
+    }
+
     private void printText(String text) {
         saveSettings();
         new Thread(() -> {
@@ -555,6 +591,10 @@ public class MainActivity extends Activity {
 
         if (first.startsWith("D.")) {
             return drinkTextToBitmap(content);
+        }
+
+        if (first.startsWith("TEL:")) {
+            return telTextToBitmap(content);
         }
 
         return normalTextToBitmap(content);
@@ -644,6 +684,102 @@ public class MainActivity extends Activity {
 
             canvas.drawText(line, x, y, paint);
             y += isTime ? 24 : lineHeight;
+        }
+
+        return bitmap;
+    }
+
+
+    private Bitmap telTextToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
+
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+
+        java.util.ArrayList<String> raw = new java.util.ArrayList<>();
+        String[] rawLines = text == null ? new String[]{"TEL"} : text.replace("\r", "").split("\n");
+        for (String s : rawLines) {
+            String line = s == null ? "" : s.trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+            raw.add(line);
+        }
+        if (raw.size() == 0) raw.add("TEL:");
+
+        String header = raw.get(0);
+        String price = "";
+
+        int p = header.lastIndexOf("$");
+        if (p >= 0) {
+            price = header.substring(p).trim();
+            header = header.substring(0, p).trim();
+        }
+
+        String time = "";
+        java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
+        for (int i = 1; i < raw.size(); i++) {
+            String line = raw.get(i);
+            if (line.matches("\\d{2}/\\d{2}.*")) {
+                time = line;
+            } else if (line.startsWith("$")) {
+                price = line;
+            } else if (line.contains("$")) {
+                int pp = line.lastIndexOf("$");
+                if (pp >= 0) {
+                    price = line.substring(pp).trim();
+                    String left = line.substring(0, pp).trim();
+                    if (left.length() > 0) itemLines.add(left);
+                }
+            } else {
+                itemLines.add(line);
+            }
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        paint.setFakeBoldText(true);
+        float telSize = 34;
+        paint.setTextSize(telSize);
+        while (paint.measureText(header) > width - (margin * 2) && telSize > 24) {
+            telSize -= 1;
+            paint.setTextSize(telSize);
+        }
+        float hw = paint.measureText(header);
+        canvas.drawText(header, Math.max(margin, (width - hw) / 2f), 48, paint);
+
+        int y = 98;
+        for (int i = 0; i < itemLines.size() && i < 3; i++) {
+            String line = itemLines.get(i);
+            paint.setTextSize(i == 0 ? 34 : 30);
+            java.util.ArrayList<String> wrapped = wrapText(line, paint, width - (margin * 2));
+            for (String w : wrapped) {
+                if (y > 150) break;
+                float tw = paint.measureText(w);
+                float x = (width - tw) / 2f;
+                if (x < margin) x = margin;
+                if (x + tw > width - margin) x = width - margin - tw;
+                canvas.drawText(w, x, y, paint);
+                y += 38;
+            }
+        }
+
+        if (price.length() > 0) {
+            paint.setTextSize(30);
+            paint.setFakeBoldText(true);
+            float pw = paint.measureText(price);
+            canvas.drawText(price, (width - pw) / 2f, height - 52, paint);
+        }
+
+        if (time.length() > 0) {
+            paint.setTextSize(19);
+            paint.setFakeBoldText(true);
+            float tw = paint.measureText(time);
+            canvas.drawText(time, (width - tw) / 2f, height - 20, paint);
         }
 
         return bitmap;
