@@ -206,14 +206,16 @@ public class MainActivity extends Activity {
         saveSettings();
         new Thread(() -> {
             try {
-                String content = text == null ? "" : text.replace("\r", "").trim();
-                if (content.length() == 0) content = "TEST";
+               String content = text == null ? "" : text.replace("\r", "").trim();
+if (content.length() == 0) content = "TEST";
 
-                final byte[] printData = buildEzplImage(content);
-                ui(() -> {
-                    status("列印中...");
-                    log("收到 POS 列印內容:\n" + content + "\n\nEZPL IMAGE bytes=" + printData.length);
-                });
+final String finalContent = content;
+final byte[] printData = buildEzplImage(finalContent);
+
+ui(() -> {
+    status("列印中...");
+    log("收到 POS 列印內容:\n" + finalContent + "\n\nEZPL IMAGE bytes=" + printData.length);
+});
 
                 sendSocket(printData);
                 ui(() -> status("列印已送出"));
