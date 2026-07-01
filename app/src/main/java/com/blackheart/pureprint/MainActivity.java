@@ -56,9 +56,9 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        Button menuBtn = btn("☰", Color.rgb(255, 209, 102));
-        menuBtn.setTextSize(24);
-        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(72, 72);
+        Button menuBtn = btn("☰ 設定", Color.rgb(255, 209, 102));
+        menuBtn.setTextSize(18);
+        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(150, 72);
         menuLp.leftMargin = 14;
         menuLp.topMargin = 14;
         root.addView(menuBtn, menuLp);
@@ -73,7 +73,7 @@ public class MainActivity extends Activity {
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
-        TextView title = tv("設定面板", 20, Color.BLACK, true);
+        TextView title = tv("設定面板 V49.2", 20, Color.BLACK, true);
         Button closeBtn = btn("×", Color.rgb(255, 209, 102));
         closeBtn.setTextSize(24);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
