@@ -47,80 +47,106 @@ public class MainActivity extends Activity {
     }
 
     private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(0, 0, 0, 0);
+        FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
+
+        webView = new WebView(this);
+        root.addView(webView, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        Button menuBtn = btn("☰", Color.rgb(255, 209, 102));
+        menuBtn.setTextSize(24);
+        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(72, 72);
+        menuLp.leftMargin = 14;
+        menuLp.topMargin = 14;
+        root.addView(menuBtn, menuLp);
 
         setupPanel = new LinearLayout(this);
         setupPanel.setOrientation(LinearLayout.VERTICAL);
-        setupPanel.setPadding(14, 14, 14, 14);
-        setupPanel.setBackgroundColor(Color.rgb(17, 17, 17));
+        setupPanel.setPadding(18, 18, 18, 18);
+        setupPanel.setBackgroundColor(Color.rgb(245, 245, 245));
+        setupPanel.setVisibility(View.VISIBLE);
 
-        TextView title = tv("🍠 BlackHeart POS｜長按 POS 畫面叫出設定", 22, Color.WHITE, true);
-        setupPanel.addView(title);
+        LinearLayout titleRow = new LinearLayout(this);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
-        statusText = tv("尚未載入 POS", 17, Color.rgb(255, 209, 102), true);
+        TextView title = tv("設定面板", 20, Color.BLACK, true);
+        Button closeBtn = btn("×", Color.rgb(255, 209, 102));
+        closeBtn.setTextSize(24);
+        titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        titleRow.addView(closeBtn, new LinearLayout.LayoutParams(70, 70));
+        setupPanel.addView(titleRow);
+
+        statusText = tv("尚未載入 POS", 15, Color.rgb(40, 40, 40), true);
         setupPanel.addView(statusText);
 
-        setupPanel.addView(label("POS Web App 網址"));
+        setupPanel.addView(labelDark("POS Web App 網址"));
         webAppUrlInput = input("https://script.google.com/macros/s/XXXX/exec");
         setupPanel.addView(webAppUrlInput);
 
-        setupPanel.addView(label("GoDEX IP"));
+        setupPanel.addView(labelDark("GoDEX IP"));
         printerIpInput = input("192.168.31.189");
         setupPanel.addView(printerIpInput);
 
-        setupPanel.addView(label("Port"));
+        setupPanel.addView(labelDark("Port"));
         portInput = input("9100");
         setupPanel.addView(portInput);
 
-        LinearLayout btnRow = new LinearLayout(this);
-        btnRow.setOrientation(LinearLayout.HORIZONTAL);
-
-        loadBtn = btn("載入 POS", Color.rgb(6, 214, 160));
-        reloadBtn = btn("重新整理", Color.rgb(142, 202, 230));
+        loadBtn = btn("儲存 / 載入 POS", Color.rgb(6, 214, 160));
+        reloadBtn = btn("重新整理 POS", Color.rgb(142, 202, 230));
         testBtn = btn("測試列印", Color.rgb(255, 209, 102));
 
-        btnRow.addView(loadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        setupPanel.addView(loadBtn);
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.addView(reloadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         btnRow.addView(testBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         setupPanel.addView(btnRow);
 
-        logText = tv("", 12, Color.WHITE, false);
-        logText.setBackgroundColor(Color.rgb(43, 43, 43));
+        setupPanel.addView(labelDark("LOG"));
+        logText = tv("", 12, Color.rgb(20, 20, 20), false);
+        logText.setBackgroundColor(Color.rgb(235, 235, 235));
         logText.setPadding(12, 8, 12, 8);
         setupPanel.addView(logText, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                110
+                120
         ));
 
-        root.addView(setupPanel, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
+        FrameLayout.LayoutParams panelLp = new FrameLayout.LayoutParams(
+                dp(360),
                 ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
+        );
+        panelLp.leftMargin = 24;
+        panelLp.topMargin = 96;
+        root.addView(setupPanel, panelLp);
 
-        webView = new WebView(this);
-        root.addView(webView, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                0,
-                1
-        ));
-
+        menuBtn.setOnClickListener(v -> toggleSetupPanel());
+        closeBtn.setOnClickListener(v -> hideSetupPanel());
         loadBtn.setOnClickListener(v -> loadPosUrl());
         reloadBtn.setOnClickListener(v -> {
             if (webView != null) webView.reload();
         });
         testBtn.setOnClickListener(v -> printText("黑心地瓜球\n測試列印\n$60"));
 
-        // 營業模式下若要改網址/IP：長按 POS 畫面叫回設定面板。
-        webView.setOnLongClickListener(v -> {
-            showSetupPanel();
-            Toast.makeText(MainActivity.this, "已顯示設定面板", Toast.LENGTH_SHORT).show();
-            return true;
-        });
-
         setContentView(root);
+    }
+
+    private int dp(int value) {
+        return (int)(value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private TextView labelDark(String text) {
+        return tv(text, 14, Color.rgb(20, 20, 20), true);
+    }
+
+    private void toggleSetupPanel() {
+        if (setupPanel == null) return;
+        if (setupPanel.getVisibility() == View.VISIBLE) hideSetupPanel();
+        else showSetupPanel();
     }
 
     private void hideSetupPanel() {
@@ -237,15 +263,44 @@ public class MainActivity extends Activity {
                 String content = text == null ? "" : text.replace("\r", "").trim();
                 if (content.length() == 0) content = "TEST";
 
-                final String finalContent = content;
-                final byte[] printData = buildEzplImage(finalContent);
+                // V1.1 修正：POS 一次送整筆訂單時，會用 --- 分隔多張標籤。
+                // 這裡由 APK 端拆成多張逐張送 GoDEX，避免全部擠在同一張標籤。
+                String[] labels = content.split("(?m)^\\s*---\\s*$");
+                int total = 0;
+                for (String label : labels) {
+                    if (label != null && label.trim().length() > 0) total++;
+                }
+                if (total <= 0) {
+                    labels = new String[]{"TEST"};
+                    total = 1;
+                }
+
+                final int finalTotal = total;
                 ui(() -> {
-                    status("列印中...");
-                    log("收到 POS 列印內容:\n" + finalContent + "\n\nEZPL IMAGE bytes=" + printData.length);
+                    status("列印中...共 " + finalTotal + " 張");
+                    log("收到 POS 列印內容，共 " + finalTotal + " 張");
                 });
 
-                sendSocket(printData);
-                ui(() -> status("列印已送出"));
+                int index = 0;
+                for (String label : labels) {
+                    String one = label == null ? "" : label.trim();
+                    if (one.length() == 0) continue;
+                    index++;
+
+                    final String finalOne = one;
+                    final int finalIndex = index;
+                    final byte[] printData = buildEzplImage(finalOne);
+
+                    ui(() -> {
+                        status("列印中..." + finalIndex + "/" + finalTotal);
+                        log("第 " + finalIndex + "/" + finalTotal + " 張\n" + finalOne + "\n\nEZPL IMAGE bytes=" + printData.length);
+                    });
+
+                    sendSocket(printData);
+                    Thread.sleep(350);
+                }
+
+                ui(() -> status("列印已送出｜共 " + finalTotal + " 張"));
 
             } catch (Exception ex) {
                 ui(() -> {
