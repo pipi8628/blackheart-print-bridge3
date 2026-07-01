@@ -4,54 +4,35 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.view.ViewGroup;
+import android.view.View;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.*;
 
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.URL;
-import java.net.URLEncoder;
 
 public class MainActivity extends Activity {
 
     private EditText webAppUrlInput, printerIpInput, portInput;
-    private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn, skipBtn;
+    private TextView statusText, logText;
+    private Button loadBtn, reloadBtn, testBtn;
+    private WebView webView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
-
-    private boolean running = false;
-    private boolean working = false;
-    private int printedCount = 0;
-
-    private String lastBaseUrl = "";
-    private String lastRow = "";
-    private String lastId = "";
-    private String lastOrderNo = "";
-    private String lastLabelNo = "";
-
-    private final Runnable poller = new Runnable() {
-        @Override public void run() {
-            if (running) {
-                pollOnce();
-                handler.postDelayed(this, 2000);
-            }
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,28 +40,23 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
         loadSettings();
+        setupWebView();
+        String url = webAppUrlInput.getText().toString().trim();
+        if (url.length() > 0) loadPosUrl();
     }
 
     private void buildUi() {
-        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 24, 24, 24);
+        root.setPadding(14, 14, 14, 14);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
-        scroll.addView(root, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 圖片列印版", 26, Color.WHITE, true));
+        root.addView(tv("🍠 BlackHeart POS WebView Bridge｜GoDEX DX2", 22, Color.WHITE, true));
 
-        statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
+        statusText = tv("尚未載入 POS", 17, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
 
-        countText = tv("已列印：0", 34, Color.rgb(190, 220, 255), true);
-        root.addView(countText);
-
-        root.addView(label("Apps Script Web App 網址"));
+        root.addView(label("POS Web App 網址"));
         webAppUrlInput = input("https://script.google.com/macros/s/XXXX/exec");
         root.addView(webAppUrlInput);
 
@@ -92,66 +68,67 @@ public class MainActivity extends Activity {
         portInput = input("9100");
         root.addView(portInput);
 
-        startBtn = btn("▶️ 開始監聽", Color.rgb(6, 214, 160));
-        stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
-        testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
-        skipBtn = btn("🗑 略過目前待印", Color.rgb(255, 183, 3));
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        root.addView(startBtn);
-        root.addView(stopBtn);
-        root.addView(testBtn);
-        root.addView(skipBtn);
+        loadBtn = btn("載入 POS", Color.rgb(6, 214, 160));
+        reloadBtn = btn("重新整理", Color.rgb(142, 202, 230));
+        testBtn = btn("測試列印", Color.rgb(255, 209, 102));
 
-        root.addView(label("Log"));
-        logText = tv("", 14, Color.WHITE, false);
+        btnRow.addView(loadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        btnRow.addView(reloadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        btnRow.addView(testBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        root.addView(btnRow);
+
+        logText = tv("", 12, Color.WHITE, false);
         logText.setBackgroundColor(Color.rgb(43, 43, 43));
-        logText.setPadding(16, 16, 16, 16);
+        logText.setPadding(12, 8, 12, 8);
         root.addView(logText, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        startBtn.setOnClickListener(v -> start());
-        stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\n少冰半糖"));
-        skipBtn.setOnClickListener(v -> skipCurrentPending());
+        webView = new WebView(this);
+        root.addView(webView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1
+        ));
 
-        setContentView(scroll);
+        loadBtn.setOnClickListener(v -> loadPosUrl());
+        reloadBtn.setOnClickListener(v -> {
+            if (webView != null) webView.reload();
+        });
+        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n測試列印\n$60"));
+
+        setContentView(root);
     }
 
-    private TextView tv(String text, int sp, int color, boolean bold) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(sp);
-        v.setTextColor(color);
-        v.setPadding(0, 8, 0, 8);
-        if (bold) v.setTypeface(null, Typeface.BOLD);
-        return v;
-    }
+    private void setupWebView() {
+        WebSettings s = webView.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setSupportZoom(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
 
-    private TextView label(String text) {
-        return tv(text, 18, Color.rgb(255, 209, 102), true);
-    }
-
-    private EditText input(String hint) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setSingleLine(false);
-        e.setMinLines(1);
-        e.setTextColor(Color.BLACK);
-        e.setTextSize(18);
-        e.setBackgroundColor(Color.WHITE);
-        e.setPadding(16, 12, 16, 12);
-        return e;
-    }
-
-    private Button btn(String text, int bg) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(20);
-        b.setTextColor(Color.BLACK);
-        b.setBackgroundColor(bg);
-        return b;
+        webView.addJavascriptInterface(new PrinterBridge(), "AndroidPrinter");
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                status("POS 已載入｜AndroidPrinter 已注入");
+                // 讓前端偵錯更明顯：頁面載入後在 console/全域標記橋接存在
+                view.evaluateJavascript("window.__ANDROID_PRINTER_READY__ = !!window.AndroidPrinter; console.log('AndroidPrinter ready:', !!window.AndroidPrinter);", null);
+            }
+        });
     }
 
     private void loadSettings() {
@@ -168,142 +145,61 @@ public class MainActivity extends Activity {
                 .apply();
     }
 
-    private void start() {
+    private void loadPosUrl() {
         saveSettings();
-        running = true;
-        status("監聽中...");
-        handler.removeCallbacks(poller);
-        handler.post(poller);
+        String url = webAppUrlInput.getText().toString().trim();
+        if (url.length() == 0) {
+            status("請先輸入 POS Web App 網址");
+            return;
+        }
+        status("載入 POS 中...");
+        webView.loadUrl(url);
     }
 
-    private void stop() {
-        running = false;
-        handler.removeCallbacks(poller);
-        status("已停止");
+    public class PrinterBridge {
+        @JavascriptInterface
+        public void printText(String text) {
+            MainActivity.this.printText(text);
+        }
+
+        @JavascriptInterface
+        public boolean isReady() {
+            return true;
+        }
     }
 
-    private void pollOnce() {
-        if (working) return;
-        working = true;
-
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
-
-                String json = httpGet(base + "?api=pending");
-                JSONObject job = new JSONObject(json);
-
-                if (!job.optBoolean("ok", false)) {
-                    ui(() -> {
-                        statusText.setText("監聽中｜沒有待列印貼紙");
-                        working = false;
-                    });
-                    return;
-                }
-
-                String row = job.optString("row", "");
-                String id = job.optString("id", "");
-                String orderNo = job.optString("orderNo", "");
-                String labelNo = job.optString("labelNo", "");
-
-                lastBaseUrl = base;
-                lastRow = row;
-                lastId = id;
-                lastOrderNo = orderNo;
-                lastLabelNo = labelNo;
-
-                String labelText = firstNonEmpty(
-                        job.optString("labelText", ""),
-                        job.optString("text", ""),
-                        job.optString("content", ""),
-                        job.optString("plain", "")
-                );
-
-                if (labelText.length() == 0) {
-                    String old = firstNonEmpty(job.optString("zpl", ""), job.optString("tspl", ""), job.optString("ezpl", ""));
-                    labelText = extractReadableText(old);
-                }
-
-                final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
-                final String zpl = buildEzplImage(finalText);
-
-                ui(() -> {
-                    status("收到 #" + orderNo + " 第 " + labelNo + " 張，正在列印...");
-                    log("送出內容:\n" + zpl);
-                });
-
-                sendSocket(zpl);
-
-                if (row.length() > 0 || id.length() > 0) {
-                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-                }
-
-                printedCount++;
-                ui(() -> {
-                    countText.setText("已列印：" + printedCount);
-                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張");
-                    working = false;
-                });
-
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("錯誤：" + ex.getMessage());
-                    log(ex.toString());
-                    working = false;
-                });
-            }
-        }).start();
+    private TextView tv(String text, int sp, int color, boolean bold) {
+        TextView v = new TextView(this);
+        v.setText(text);
+        v.setTextSize(sp);
+        v.setTextColor(color);
+        v.setPadding(0, 5, 0, 5);
+        if (bold) v.setTypeface(null, Typeface.BOLD);
+        return v;
     }
 
-    private void skipCurrentPending() {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
+    private TextView label(String text) {
+        return tv(text, 14, Color.rgb(255, 209, 102), true);
+    }
 
-                String row = lastRow;
-                String id = lastId;
-                String orderNo = lastOrderNo;
-                String labelNo = lastLabelNo;
+    private EditText input(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setSingleLine(true);
+        e.setTextColor(Color.BLACK);
+        e.setTextSize(18);
+        e.setBackgroundColor(Color.WHITE);
+        e.setPadding(12, 8, 12, 8);
+        return e;
+    }
 
-                // 如果目前畫面沒有已讀取的訂單，就主動抓一次 pending 再略過。
-                if ((row == null || row.length() == 0) && (id == null || id.length() == 0)) {
-                    String json = httpGet(base + "?api=pending");
-                    JSONObject job = new JSONObject(json);
-                    if (!job.optBoolean("ok", false)) {
-                        ui(() -> status("沒有待略過訂單"));
-                        return;
-                    }
-                    row = job.optString("row", "");
-                    id = job.optString("id", "");
-                    orderNo = job.optString("orderNo", "");
-                    labelNo = job.optString("labelNo", "");
-                }
-
-                if (row.length() == 0 && id.length() == 0) {
-                    throw new Exception("找不到 row/id，無法標記完成");
-                }
-
-                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-
-                lastBaseUrl = base;
-                lastRow = "";
-                lastId = "";
-                lastOrderNo = "";
-                lastLabelNo = "";
-
-                final String msg = "已略過待印訂單 #" + orderNo + " 第 " + labelNo + " 張";
-                ui(() -> status(msg));
-
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("略過失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
+    private Button btn(String text, int bg) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(16);
+        b.setTextColor(Color.BLACK);
+        b.setBackgroundColor(bg);
+        return b;
     }
 
     private void printText(String text) {
@@ -313,95 +209,321 @@ public class MainActivity extends Activity {
                 String content = text == null ? "" : text.replace("\r", "").trim();
                 if (content.length() == 0) content = "TEST";
 
-                final String finalContent = content;
-                final String zpl = buildEzplImage(finalContent);
-
+                final byte[] printData = buildEzplImage(content);
                 ui(() -> {
                     status("列印中...");
-                    log("送出內容:\n" + zpl);
+                    log("收到 POS 列印內容:\n" + content + "\n\nEZPL IMAGE bytes=" + printData.length);
                 });
 
-                sendSocket(zpl);
-
-                ui(() -> status("測試列印已送出"));
+                sendSocket(printData);
+                ui(() -> status("列印已送出"));
 
             } catch (Exception ex) {
                 ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
+                    status("列印失敗：" + ex.getMessage());
                     log(ex.toString());
                 });
             }
         }).start();
     }
 
-    // DX2 最穩定方案：把中文先畫成 Bitmap，再用 EZPL 圖像指令列印。
-    // 這樣不需要 Big5 / UTF-8 / AH / VF / AZ1，也不依賴印表機中文字型。
-    private String buildEzplImage(String text) {
-        String content = text == null ? "TEST" : text
-                .replace("\r", "")
-                .trim();
+    private byte[] buildEzplImage(String text) throws Exception {
+        String content = text == null ? "TEST" : text.replace("\r", "").trim();
         if (content.length() == 0) content = "TEST";
 
         Bitmap bmp = textToBitmap(content);
-        String hex = bitmapToHex(bmp);
+        byte[] img = bitmapToBytes(bmp);
 
         int widthBytes = (bmp.getWidth() + 7) / 8;
         int height = bmp.getHeight();
 
-        StringBuilder ezpl = new StringBuilder();
-        ezpl.append("^L\r\n");
-        ezpl.append("^H12\r\n");
-        ezpl.append("^Q40,3\r\n");
-        ezpl.append("^W60\r\n");
-        ezpl.append("^1\r\n");
-        ezpl.append("GW,0,0,")
-                .append(widthBytes).append(",")
-                .append(height).append(",")
-                .append(hex)
-                .append("\r\n");
-        ezpl.append("E\r\n");
-        return ezpl.toString();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(("^Q30,3\r\n").getBytes("US-ASCII"));
+        out.write(("^W40\r\n").getBytes("US-ASCII"));
+        out.write(("^H12\r\n").getBytes("US-ASCII"));
+        out.write(("^S2\r\n").getBytes("US-ASCII"));
+        out.write(("^L\r\n").getBytes("US-ASCII"));
+        out.write(("Q0,10," + widthBytes + "," + height + "\r\n").getBytes("US-ASCII"));
+        out.write(img);
+        out.write(("\r\nE\r\n").getBytes("US-ASCII"));
+        return out.toByteArray();
     }
 
     private Bitmap textToBitmap(String text) {
+        String content = text == null ? "TEST" : text.replace("\r", "").trim();
+        if (content.length() == 0) content = "TEST";
+
+        String[] rawLines = content.split("\n");
+        String first = "";
+        for (String s : rawLines) {
+            if (s != null && s.trim().length() > 0 && !s.trim().equals("---")) {
+                first = s.trim();
+                break;
+            }
+        }
+
+        if (first.startsWith("D.")) return drinkTextToBitmap(content);
+        if (first.startsWith("TEL:")) return telTextToBitmap(content);
+        return normalTextToBitmap(content);
+    }
+
+    private Bitmap normalTextToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(Color.BLACK);
-        paint.setTextSize(42);
         paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
 
-        int width = 448; // 60mm 標籤保守寬度，56 bytes
-        int padding = 20;
-        int lineHeight = 60;
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+        int y = 46;
+        int lineHeight = 42;
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text.replace("\r", "").split("\n");
-        for (String raw : rawLines) {
-            String line = raw == null ? "" : raw.trim();
-            if (line.length() == 0) continue;
-            lines.addAll(wrapText(line, paint, width - padding * 2));
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
+
+        for (String rawLine : rawLines) {
+            String line = rawLine == null ? "" : rawLine.trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+
+            if (line.contains("$") || line.matches("\\d{2}/\\d{2}.*")) {
+                lines.add(line);
+            } else {
+                paint.setTextSize(34);
+                lines.addAll(wrapText(line, paint, width - (margin * 3)));
+            }
         }
 
         if (lines.size() == 0) lines.add("TEST");
-        while (lines.size() > 5) lines.remove(lines.size() - 1);
+        while (lines.size() > 6) lines.remove(lines.size() - 1);
 
-        int height = padding * 2 + lineHeight * lines.size();
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        Paint.FontMetrics fm = paint.getFontMetrics();
-        int y = padding + (int)(-fm.ascent);
         for (String line : lines) {
-            canvas.drawText(line, padding, y, paint);
-            y += lineHeight;
+            boolean isHeader = line.contains("$");
+            boolean isTime = line.matches("\\d{2}/\\d{2}.*");
+
+            if (isHeader) {
+                String left = line;
+                String price = "";
+                int p = line.lastIndexOf("$");
+                if (p >= 0) {
+                    left = line.substring(0, p).trim();
+                    price = line.substring(p).trim();
+                }
+                paint.setTextSize(34);
+                paint.setFakeBoldText(true);
+                canvas.drawText(left, margin, y, paint);
+                if (price.length() > 0) {
+                    float priceWidth = paint.measureText(price);
+                    canvas.drawText(price, width - margin - priceWidth, y, paint);
+                }
+                y += 48;
+                continue;
+            }
+
+            if (isTime) {
+                paint.setTextSize(18);
+            } else if (line.contains("・") || line.startsWith("+")) {
+                paint.setTextSize(26);
+            } else {
+                paint.setTextSize(34);
+            }
+            paint.setFakeBoldText(true);
+
+            float textWidth = paint.measureText(line);
+            float x = (width - textWidth) / 2f;
+            if (x < margin) x = margin;
+            if (x + textWidth > width - margin) x = width - margin - textWidth;
+            if (x < margin) x = margin;
+            if (isTime && y < height - 22) y = Math.max(y, height - 24);
+            canvas.drawText(line, x, y, paint);
+            y += isTime ? 24 : lineHeight;
         }
         return bitmap;
+    }
+
+    private Bitmap telTextToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
+
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+
+        java.util.ArrayList<String> raw = new java.util.ArrayList<>();
+        String[] rawLines = text == null ? new String[]{"TEL"} : text.replace("\r", "").split("\n");
+        for (String s : rawLines) {
+            String line = s == null ? "" : s.trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+            raw.add(line);
+        }
+        if (raw.size() == 0) raw.add("TEL:");
+
+        String header = raw.get(0);
+        String price = "";
+        int p = header.lastIndexOf("$");
+        if (p >= 0) {
+            price = header.substring(p).trim();
+            header = header.substring(0, p).trim();
+        }
+
+        String time = "";
+        java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
+        for (int i = 1; i < raw.size(); i++) {
+            String line = raw.get(i);
+            if (line.matches("\\d{2}/\\d{2}.*")) time = line;
+            else if (line.startsWith("$")) price = line;
+            else if (line.contains("$")) {
+                int pp = line.lastIndexOf("$");
+                price = line.substring(pp).trim();
+                String left = line.substring(0, pp).trim();
+                if (left.length() > 0) itemLines.add(left);
+            } else itemLines.add(line);
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        float telSize = 34;
+        paint.setTextSize(telSize);
+        while (paint.measureText(header) > width - (margin * 2) && telSize > 24) {
+            telSize -= 1;
+            paint.setTextSize(telSize);
+        }
+        float hw = paint.measureText(header);
+        canvas.drawText(header, Math.max(margin, (width - hw) / 2f), 48, paint);
+
+        int y = 98;
+        for (int i = 0; i < itemLines.size() && i < 3; i++) {
+            String line = itemLines.get(i);
+            paint.setTextSize(i == 0 ? 34 : 30);
+            java.util.ArrayList<String> wrapped = wrapText(line, paint, width - (margin * 2));
+            for (String w : wrapped) {
+                if (y > 150) break;
+                float tw = paint.measureText(w);
+                float x = (width - tw) / 2f;
+                if (x < margin) x = margin;
+                if (x + tw > width - margin) x = width - margin - tw;
+                canvas.drawText(w, x, y, paint);
+                y += 38;
+            }
+        }
+
+        if (price.length() > 0) {
+            paint.setTextSize(30);
+            float pw = paint.measureText(price);
+            canvas.drawText(price, (width - pw) / 2f, height - 52, paint);
+        }
+        if (time.length() > 0) {
+            paint.setTextSize(19);
+            float tw = paint.measureText(time);
+            canvas.drawText(time, (width - tw) / 2f, height - 20, paint);
+        }
+        return bitmap;
+    }
+
+    private Bitmap drinkTextToBitmap(String text) {
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.DEFAULT_BOLD);
+        paint.setFakeBoldText(true);
+
+        int width = 320;
+        int height = 240;
+        int margin = 22;
+
+        java.util.ArrayList<String> raw = new java.util.ArrayList<>();
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
+        for (String s : rawLines) {
+            String line = s == null ? "" : s.trim();
+            if (line.length() == 0 || line.equals("---")) continue;
+            raw.add(line);
+        }
+        if (raw.size() == 0) raw.add("D.");
+
+        String header = raw.get(0);
+        String price = "";
+        int p = header.lastIndexOf("$");
+        if (p >= 0) {
+            price = header.substring(p).trim();
+            header = header.substring(0, p).trim();
+        }
+        header = normalizeDrinkHeader(header);
+
+        String time = "";
+        java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
+        for (int i = 1; i < raw.size(); i++) {
+            String line = raw.get(i);
+            if (line.matches("\\d{2}/\\d{2}.*")) time = line;
+            else if (line.startsWith("$")) price = line;
+            else itemLines.add(line);
+        }
+
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+
+        paint.setTextSize(34);
+        float headWidth = paint.measureText(header);
+        float headX = (width - headWidth) / 2f;
+        if (headX < margin) headX = margin;
+        if (headX + headWidth > width - margin) headX = width - margin - headWidth;
+        canvas.drawText(header, headX, 48, paint);
+
+        int y = 96;
+        for (int i = 0; i < itemLines.size() && i < 4; i++) {
+            String line = itemLines.get(i);
+            if (line.contains("・")) line = line.replace("・", " / ");
+            if (line.startsWith("+")) paint.setTextSize(28);
+            else if (i == 0) paint.setTextSize(34);
+            else paint.setTextSize(30);
+
+            java.util.ArrayList<String> wrapped = wrapText(line, paint, width - (margin * 2));
+            for (String w : wrapped) {
+                if (y > 175) break;
+                float tw = paint.measureText(w);
+                float x = (width - tw) / 2f;
+                if (x < margin) x = margin;
+                if (x + tw > width - margin) x = width - margin - tw;
+                canvas.drawText(w, x, y, paint);
+                y += 36;
+            }
+        }
+
+        if (time.length() > 0) {
+            paint.setTextSize(19);
+            canvas.drawText(time, margin, height - 20, paint);
+        }
+        if (price.length() > 0) {
+            paint.setTextSize(30);
+            float pw = paint.measureText(price);
+            canvas.drawText(price, width - margin - pw, height - 20, paint);
+        }
+        return bitmap;
+    }
+
+    private String normalizeDrinkHeader(String header) {
+        if (header == null) return "";
+        String h = header.trim();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\((\\d+)\\)");
+        java.util.regex.Matcher m = p.matcher(h);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            m.appendReplacement(sb, "(" + m.group(1) + "號)");
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         StringBuilder current = new StringBuilder();
-
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             String next = current.toString() + ch;
@@ -411,54 +533,36 @@ public class MainActivity extends Activity {
             }
             current.append(ch);
         }
-
         if (current.length() > 0) lines.add(current.toString());
         return lines;
     }
 
-    private String bitmapToHex(Bitmap bmp) {
-        StringBuilder hex = new StringBuilder();
+    private byte[] bitmapToBytes(Bitmap bmp) {
         int width = bmp.getWidth();
         int height = bmp.getHeight();
+        int widthBytes = (width + 7) / 8;
+        byte[] out = new byte[widthBytes * height];
 
+        int idx = 0;
         for (int y = 0; y < height; y++) {
-            int bit = 0;
-            int value = 0;
-
-            for (int x = 0; x < width; x++) {
-                int pixel = bmp.getPixel(x, y);
-                int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
-
-                value <<= 1;
-                if (gray < 200) value |= 1;
-                bit++;
-
-                if (bit == 8) {
-                    hex.append(String.format("%02X", value & 0xFF));
-                    bit = 0;
-                    value = 0;
+            for (int bx = 0; bx < widthBytes; bx++) {
+                int value = 0;
+                for (int bit = 0; bit < 8; bit++) {
+                    int x = bx * 8 + bit;
+                    value <<= 1;
+                    if (x < width) {
+                        int pixel = bmp.getPixel(x, y);
+                        int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
+                        if (gray < 230) value |= 1;
+                    }
                 }
-            }
-
-            if (bit > 0) {
-                value <<= (8 - bit);
-                hex.append(String.format("%02X", value & 0xFF));
+                out[idx++] = (byte)(value & 0xFF);
             }
         }
-        return hex.toString();
+        return out;
     }
 
-    private String sanitizeZplText(String s) {
-        if (s == null) return "";
-        return s
-                .replace("^", "")
-                .replace("~", "")
-                .replace("\r", "")
-                .replace("\n", "")
-                .trim();
-    }
-
-    private void sendSocket(String data) throws Exception {
+    private void sendSocket(byte[] data) throws Exception {
         String ip = printerIpInput.getText().toString().trim();
         int port = Integer.parseInt(portInput.getText().toString().trim());
 
@@ -467,67 +571,12 @@ public class MainActivity extends Activity {
         socket.setSoTimeout(5000);
 
         OutputStream os = socket.getOutputStream();
-        os.write(data.getBytes("US-ASCII"));
+        os.write(data);
         os.flush();
 
-        Thread.sleep(1000);
+        Thread.sleep(250);
         os.close();
         socket.close();
-    }
-
-    private String firstNonEmpty(String... values) {
-        if (values == null) return "";
-        for (String v : values) {
-            if (v != null && v.trim().length() > 0) return v.trim();
-        }
-        return "";
-    }
-
-    // 如果後端還回傳舊 EZPL，先盡量把可讀文字抽出來。
-    private String extractReadableText(String raw) {
-        if (raw == null) return "";
-        StringBuilder sb = new StringBuilder();
-        String[] lines = raw.replace("\r", "").split("\n");
-        for (String line : lines) {
-            String t = line.trim();
-            if (t.length() == 0) continue;
-            if (t.startsWith("^") || t.startsWith("~") || t.equals("E")) continue;
-            int idx = t.lastIndexOf(",");
-            if (idx >= 0 && idx < t.length() - 1) {
-                String tail = t.substring(idx + 1).replace("\"", "").trim();
-                if (tail.length() > 0) sb.append(tail).append("\n");
-            }
-        }
-        return sb.toString().trim();
-    }
-
-    private String httpGet(String urlText) throws Exception {
-        URL url = new URL(urlText);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(8000);
-        c.setReadTimeout(8000);
-        c.setRequestMethod("GET");
-        c.setInstanceFollowRedirects(true);
-
-        InputStream in = c.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line);
-        br.close();
-        return sb.toString();
-    }
-
-    private String cleanUrl(String s) {
-        if (s == null) return "";
-        s = s.trim();
-        if (s.endsWith("?")) return s.substring(0, s.length() - 1);
-        if (s.endsWith("&")) return s.substring(0, s.length() - 1);
-        return s;
-    }
-
-    private String enc(String s) throws Exception {
-        return URLEncoder.encode(s == null ? "" : s, "UTF-8");
     }
 
     private void ui(Runnable r) {
