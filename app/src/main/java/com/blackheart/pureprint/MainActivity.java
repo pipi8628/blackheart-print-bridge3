@@ -4,67 +4,35 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Build;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
-import android.graphics.Rect;
 import android.view.ViewGroup;
+import android.view.View;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.*;
 
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
 
 public class MainActivity extends Activity {
 
     private EditText webAppUrlInput, printerIpInput, portInput;
-    private TextView statusText, countText, logText;
-    private Button startBtn, stopBtn, testBtn, skipBtn, cancelAllBtn;
+    private TextView statusText, logText;
+    private Button loadBtn, reloadBtn, testBtn;
+    private WebView webView;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
-
-    private boolean running = false;
-    private boolean working = false;
-    private int printedCount = 0;
-    private volatile int ignoreBeforeOrderNo = 0;
-    private volatile int ignoreBeforeRowNo = 0;
-    private volatile boolean backgroundClearing = false;
-
-    private String lastBaseUrl = "";
-    private String lastRow = "";
-    private String lastId = "";
-    private String lastOrderNo = "";
-    private String lastLabelNo = "";
-    private static final int POLL_FAST_MS = 150;
-    private static final int POLL_IDLE_MS = 1000;
-    private static final int POLL_TIMEOUT_MS = 2000;
-    private static final int POLL_COOLDOWN_MS = 5000;
-    private int nextPollDelayMs = POLL_IDLE_MS;
-    private int pendingTimeoutCount = 0;
-
-    private final Runnable poller = new Runnable() {
-        @Override public void run() {
-            if (running) {
-                pollOnce();
-                handler.postDelayed(this, nextPollDelayMs);
-            }
-        }
-    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -72,28 +40,23 @@ public class MainActivity extends Activity {
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
         loadSettings();
+        setupWebView();
+        String url = webAppUrlInput.getText().toString().trim();
+        if (url.length() > 0) loadPosUrl();
     }
 
     private void buildUi() {
-        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(24, 24, 24, 24);
+        root.setPadding(14, 14, 14, 14);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
-        scroll.addView(root, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-        ));
 
-        root.addView(tv("🏷️ BlackHeart PurePrint｜DX2 V4.9 快準版", 26, Color.WHITE, true));
+        root.addView(tv("🍠 BlackHeart POS WebView Bridge｜GoDEX DX2", 22, Color.WHITE, true));
 
-        statusText = tv("尚未啟動", 20, Color.rgb(255, 209, 102), true);
+        statusText = tv("尚未載入 POS", 17, Color.rgb(255, 209, 102), true);
         root.addView(statusText);
 
-        countText = tv("已列印：0", 34, Color.rgb(190, 220, 255), true);
-        root.addView(countText);
-
-        root.addView(label("Apps Script Web App 網址"));
+        root.addView(label("POS Web App 網址"));
         webAppUrlInput = input("https://script.google.com/macros/s/XXXX/exec");
         root.addView(webAppUrlInput);
 
@@ -105,79 +68,73 @@ public class MainActivity extends Activity {
         portInput = input("9100");
         root.addView(portInput);
 
-        startBtn = btn("▶️ 開始監聽", Color.rgb(6, 214, 160));
-        stopBtn = btn("⏸️ 停止監聽", Color.rgb(239, 71, 111));
-        testBtn = btn("🧪 測試列印", Color.rgb(0, 140, 255));
-        skipBtn = btn("🗑 略過目前待印", Color.rgb(255, 183, 3));
-        cancelAllBtn = btn("🧹 取消全部待印", Color.rgb(255, 120, 120));
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
 
-        root.addView(startBtn);
-        root.addView(stopBtn);
-        root.addView(testBtn);
-        root.addView(skipBtn);
-        root.addView(cancelAllBtn);
+        loadBtn = btn("載入 POS", Color.rgb(6, 214, 160));
+        reloadBtn = btn("重新整理", Color.rgb(142, 202, 230));
+        testBtn = btn("測試列印", Color.rgb(255, 209, 102));
 
-        root.addView(label("Log"));
-        logText = tv("", 14, Color.WHITE, false);
+        btnRow.addView(loadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        btnRow.addView(reloadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        btnRow.addView(testBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        root.addView(btnRow);
+
+        logText = tv("", 12, Color.WHITE, false);
         logText.setBackgroundColor(Color.rgb(43, 43, 43));
-        logText.setPadding(16, 16, 16, 16);
+        logText.setPadding(12, 8, 12, 8);
         root.addView(logText, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
-        startBtn.setOnClickListener(v -> start());
-        stopBtn.setOnClickListener(v -> stop());
-        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n珍珠奶茶\n少冰半糖"));
-        skipBtn.setOnClickListener(v -> skipCurrentPending());
-        cancelAllBtn.setOnClickListener(v -> cancelAllPending());
+        webView = new WebView(this);
+        root.addView(webView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                0,
+                1
+        ));
 
-        setContentView(scroll);
+        loadBtn.setOnClickListener(v -> loadPosUrl());
+        reloadBtn.setOnClickListener(v -> {
+            if (webView != null) webView.reload();
+        });
+        testBtn.setOnClickListener(v -> printText("黑心地瓜球\n測試列印\n$60"));
+
+        setContentView(root);
     }
 
-    private TextView tv(String text, int sp, int color, boolean bold) {
-        TextView v = new TextView(this);
-        v.setText(text);
-        v.setTextSize(sp);
-        v.setTextColor(color);
-        v.setPadding(0, 8, 0, 8);
-        if (bold) v.setTypeface(null, Typeface.BOLD);
-        return v;
-    }
+    private void setupWebView() {
+        WebSettings s = webView.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(true);
+        s.setLoadWithOverviewMode(true);
+        s.setUseWideViewPort(true);
+        s.setSupportZoom(false);
+        s.setBuiltInZoomControls(false);
+        s.setDisplayZoomControls(false);
+        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        }
 
-    private TextView label(String text) {
-        return tv(text, 18, Color.rgb(255, 209, 102), true);
-    }
-
-    private EditText input(String hint) {
-        EditText e = new EditText(this);
-        e.setHint(hint);
-        e.setSingleLine(false);
-        e.setMinLines(1);
-        e.setTextColor(Color.BLACK);
-        e.setTextSize(24);
-        e.setBackgroundColor(Color.WHITE);
-        e.setPadding(16, 12, 16, 12);
-        return e;
-    }
-
-    private Button btn(String text, int bg) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(20);
-        b.setTextColor(Color.BLACK);
-        b.setBackgroundColor(bg);
-        return b;
+        webView.addJavascriptInterface(new PrinterBridge(), "AndroidPrinter");
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                status("POS 已載入｜AndroidPrinter 已注入");
+                // 讓前端偵錯更明顯：頁面載入後在 console/全域標記橋接存在
+                view.evaluateJavascript("window.__ANDROID_PRINTER_READY__ = !!window.AndroidPrinter; console.log('AndroidPrinter ready:', !!window.AndroidPrinter);", null);
+            }
+        });
     }
 
     private void loadSettings() {
         webAppUrlInput.setText(prefs.getString("webAppUrl", ""));
         printerIpInput.setText(prefs.getString("printerIp", "192.168.31.189"));
         portInput.setText(prefs.getString("port", "9100"));
-        // 只印當天版：不再載入舊的 ignore row/order 設定，避免新單被誤擋。
-        ignoreBeforeOrderNo = 0;
-        ignoreBeforeRowNo = 0;
-        prefs.edit().remove("ignoreBeforeOrderNo").remove("ignoreBeforeRowNo").apply();
     }
 
     private void saveSettings() {
@@ -188,337 +145,61 @@ public class MainActivity extends Activity {
                 .apply();
     }
 
-    private void start() {
+    private void loadPosUrl() {
         saveSettings();
-        running = true;
-        status("待機中｜1秒輪詢");
-        handler.removeCallbacks(poller);
-        handler.post(poller);
+        String url = webAppUrlInput.getText().toString().trim();
+        if (url.length() == 0) {
+            status("請先輸入 POS Web App 網址");
+            return;
+        }
+        status("載入 POS 中...");
+        webView.loadUrl(url);
     }
 
-    private void stop() {
-        running = false;
-        handler.removeCallbacks(poller);
-        status("已停止");
-    }
-
-    private void pollOnce() {
-        if (working) return;
-        working = true;
-
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
-
-                String json;
-                try {
-                    json = httpGet(base + "?api=pending");
-                    pendingTimeoutCount = 0;
-                } catch (Exception pendingEx) {
-                    pendingTimeoutCount++;
-                    nextPollDelayMs = pendingTimeoutCount >= 3 ? POLL_COOLDOWN_MS : POLL_TIMEOUT_MS;
-                    ui(() -> {
-                        if (pendingTimeoutCount >= 3) {
-                            status("Google 忙碌多次｜5秒後恢復");
-                            pendingTimeoutCount = 0;
-                        } else {
-                            status("Google 忙碌｜2秒後重試");
-                        }
-                        working = false;
-                    });
-                    return;
-                }
-                JSONObject job = new JSONObject(json);
-
-                if (!job.optBoolean("ok", false)) {
-                    nextPollDelayMs = POLL_IDLE_MS;
-                    ui(() -> {
-                        statusText.setText("待機中｜1秒輪詢");
-                        working = false;
-                    });
-                    return;
-                }
-
-                String row = job.optString("row", "");
-                String id = job.optString("id", "");
-                String orderNo = job.optString("orderNo", "");
-                String labelNo = job.optString("labelNo", "");
-
-                lastBaseUrl = base;
-                lastRow = row;
-                lastId = id;
-                lastOrderNo = orderNo;
-                lastLabelNo = labelNo;
-
-                String orderDateText = getOrderDateText(job);
-                if (!isTodayOrder(orderDateText)) {
-                    if (row.length() > 0 || id.length() > 0) {
-                        httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-                    }
-                    final String skippedMsg = "非今日訂單自動略過 #" + orderNo + "｜日期=" + orderDateText;
-                    ui(() -> {
-                        status(skippedMsg);
-                        working = false;
-                    });
-                    return;
-                }
-
-                String labelText = firstNonEmpty(
-                        job.optString("labelText", ""),
-                        job.optString("text", ""),
-                        job.optString("content", ""),
-                        job.optString("plain", "")
-                );
-
-                if (labelText.length() == 0) {
-                    String old = firstNonEmpty(job.optString("zpl", ""), job.optString("tspl", ""), job.optString("ezpl", ""));
-                    labelText = extractReadableText(old);
-                }
-
-                final String finalText = labelText.length() == 0 ? "EMPTY" : labelText;
-                final byte[] printData = buildEzplImage(finalText);
-                final String zpl = "EZPL Q IMAGE bytes=" + printData.length;
-
-                nextPollDelayMs = POLL_FAST_MS;
-                ui(() -> {
-                    status("列印中｜快準模式 #" + orderNo + " 第 " + labelNo + " 張");
-                    log("送出內容:\n" + zpl);
-                });
-
-                try {
-                    sendSocketWithRetry(printData, orderNo, labelNo);
-                } catch (Exception printEx) {
-                    throw new Exception("列印 socket 失敗：" + printEx.getMessage());
-                }
-
-                if (row.length() > 0 || id.length() > 0) {
-                    try {
-                        httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-                    } catch (Exception doneEx) {
-                        log("done timeout 忽略（可能已成功）：" + doneEx.getMessage());
-                    }
-                }
-
-                printedCount++;
-                ui(() -> {
-                    countText.setText("已列印：" + printedCount);
-                    status("列印完成 #" + orderNo + " 第 " + labelNo + " 張｜快準續印");
-                    working = false;
-                });
-
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("錯誤：" + ex.getMessage());
-                    log(ex.toString());
-                    working = false;
-                });
-            }
-        }).start();
-    }
-
-    private void skipCurrentPending() {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
-
-                String row = lastRow;
-                String id = lastId;
-                String orderNo = lastOrderNo;
-                String labelNo = lastLabelNo;
-
-                // 如果目前畫面沒有已讀取的訂單，就主動抓一次 pending 再略過。
-                if ((row == null || row.length() == 0) && (id == null || id.length() == 0)) {
-                    String json = httpGet(base + "?api=pending");
-                    JSONObject job = new JSONObject(json);
-                    if (!job.optBoolean("ok", false)) {
-                        ui(() -> status("沒有待略過訂單"));
-                        return;
-                    }
-                    row = job.optString("row", "");
-                    id = job.optString("id", "");
-                    orderNo = job.optString("orderNo", "");
-                    labelNo = job.optString("labelNo", "");
-                }
-
-                if (row.length() == 0 && id.length() == 0) {
-                    throw new Exception("找不到 row/id，無法標記完成");
-                }
-
-                httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-
-                lastBaseUrl = base;
-                lastRow = "";
-                lastId = "";
-                lastOrderNo = "";
-                lastLabelNo = "";
-
-                final String msg = "已略過待印訂單 #" + orderNo + " 第 " + labelNo + " 張";
-                ui(() -> status(msg));
-
-            } catch (Exception ex) {
-                ui(() -> {
-                    status("略過失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
-    }
-
-
-    private void cancelAllPending() {
-        saveSettings();
-        new Thread(() -> {
-            try {
-                String base = cleanUrl(webAppUrlInput.getText().toString().trim());
-                if (base.length() == 0) throw new Exception("請輸入 Web App 網址");
-
-                int cutoff = parseOrderNo(lastOrderNo);
-                int cutoffRow = parseOrderNo(lastRow);
-
-                // 先抓目前第一筆待印，當作本次要清掉的舊單界線。
-                try {
-                    String json = httpGet(base + "?api=pending");
-                    JSONObject job = new JSONObject(json);
-                    if (job.optBoolean("ok", false)) {
-                        cutoff = Math.max(cutoff, parseOrderNo(job.optString("orderNo", "")));
-                        cutoffRow = Math.max(cutoffRow, parseOrderNo(job.optString("row", "")));
-                    }
-                } catch (Exception ignored) {}
-
-                if (cutoff <= 0 && cutoffRow <= 0) {
-                    ui(() -> status("目前沒有可判斷單號/列號的待印訂單"));
-                    return;
-                }
-
-                ignoreBeforeOrderNo = Math.max(ignoreBeforeOrderNo, cutoff);
-                // 嚴格清除模式：清除期間先暫時擋掉所有目前 pending，避免舊單被 poller 撿回去印。
-                // 背景清完後會把 ignoreBeforeRowNo 改回實際清到的最大 row。
-                int originalIgnoreBeforeRowNo = ignoreBeforeRowNo;
-                ignoreBeforeRowNo = 999999999;
-                prefs.edit()
-                        .putInt("ignoreBeforeOrderNo", ignoreBeforeOrderNo)
-                        .putInt("ignoreBeforeRowNo", ignoreBeforeRowNo)
-                        .apply();
-                backgroundClearing = true;
-
-                lastBaseUrl = base;
-                lastRow = "";
-                lastId = "";
-                lastOrderNo = "";
-                lastLabelNo = "";
-
-                final int finalCutoff = ignoreBeforeOrderNo;
-                final int finalCutoffRow = ignoreBeforeRowNo;
-                ui(() -> status("已清空本地待印｜單號#" + finalCutoff + " / 列" + finalCutoffRow + "以前背景取消，新單照常印"));
-
-                // 後端如果支援 clearAllBefore，優先用真正批次。
-                try {
-                    String clearJson = httpGet(base + "?api=clearAllBefore&orderNo=" + enc(String.valueOf(finalCutoff)) + "&row=" + enc(String.valueOf(finalCutoffRow)));
-                    JSONObject clearResult = new JSONObject(clearJson);
-                    if (clearResult.optBoolean("ok", false)) {
-                        int count = clearResult.optInt("count", clearResult.optInt("cleared", -1));
-                        ignoreBeforeRowNo = Math.max(originalIgnoreBeforeRowNo, finalCutoffRow);
-                        prefs.edit().putInt("ignoreBeforeRowNo", ignoreBeforeRowNo).apply();
-                        backgroundClearing = false;
-                        final String msg = count >= 0
-                                ? "背景已批次取消舊單，共 " + count + " 筆｜新單可正常列印"
-                                : "背景已批次取消舊單｜新單可正常列印";
-                        ui(() -> status(msg));
-                        return;
-                    }
-                } catch (Exception ignored) {
-                    // 後端尚未支援 clearAllBefore，改用背景逐筆 done，但不阻塞新單列印。
-                }
-
-                int skipped = 0;
-                int maxClearedRow = originalIgnoreBeforeRowNo;
-                java.util.HashSet<String> seen = new java.util.HashSet<>();
-
-                for (int i = 0; i < 200; i++) {
-                    String json = httpGet(base + "?api=pending");
-                    JSONObject job = new JSONObject(json);
-
-                    if (!job.optBoolean("ok", false)) break;
-
-                    String row = job.optString("row", "");
-                    String id = job.optString("id", "");
-                    String orderNo = job.optString("orderNo", "");
-                    String labelNo = job.optString("labelNo", "");
-                    int n = parseOrderNo(orderNo);
-                    int r = parseOrderNo(row);
-                    if (r > maxClearedRow) maxClearedRow = r;
-
-                    // APK 單機嚴格模式：因 pending API 只吐一筆，無法可靠分辨「清除期間的新單」。
-                    // 所以這裡會把當下持續吐出的 pending 全部 done 到清空為止，避免舊單回印。
-
-                    if (row.length() == 0 && id.length() == 0) break;
-
-                    String key = row + "|" + id;
-                    if (seen.contains(key)) break;
-                    seen.add(key);
-
-                    httpGet(base + "?api=done&row=" + enc(row) + "&id=" + enc(id));
-                    skipped++;
-
-                    final int current = skipped;
-                    final String msg = "背景取消舊單中：已取消 " + current + " 筆｜#" + orderNo + " 第 " + labelNo + " 張";
-                    ui(() -> status(msg));
-                }
-
-                ignoreBeforeRowNo = maxClearedRow;
-                prefs.edit().putInt("ignoreBeforeRowNo", ignoreBeforeRowNo).apply();
-                backgroundClearing = false;
-                final int total = skipped;
-                final int finalMaxClearedRow = maxClearedRow;
-                ui(() -> status("背景取消完成，共 " + total + " 筆｜已略過到 row " + finalMaxClearedRow));
-
-            } catch (Exception ex) {
-                backgroundClearing = false;
-                ui(() -> {
-                    status("取消全部失敗：" + ex.getMessage());
-                    log(ex.toString());
-                });
-            }
-        }).start();
-    }
-
-
-    private void sendSocketWithRetry(byte[] printData, String orderNo, String labelNo) throws Exception {
-        Exception last = null;
-
-        for (int attempt = 1; attempt <= 3; attempt++) {
-            try {
-                sendSocket(printData);
-
-                // GoDEX DX2 連續圖像列印需要一點緩衝；太快會偶發少張。
-                try {
-                    Thread.sleep(300);
-                } catch (InterruptedException ignored) {}
-
-                if (attempt > 1) {
-                    final int okAttempt = attempt;
-                    ui(() -> log("重試成功 #" + orderNo + " 第 " + labelNo + " 張｜第 " + okAttempt + " 次"));
-                }
-
-                return;
-            } catch (Exception ex) {
-                last = ex;
-                final int failAttempt = attempt;
-                ui(() -> {
-                    status("列印忙碌｜同張重試 " + failAttempt + "/3");
-                    log("列印 socket 失敗，準備重試同張 #" + orderNo + " 第 " + labelNo + " 張：" + ex.getMessage());
-                });
-
-                try {
-                    Thread.sleep(2000);
-                } catch (InterruptedException ignored) {}
-            }
+    public class PrinterBridge {
+        @JavascriptInterface
+        public void printText(String text) {
+            MainActivity.this.printText(text);
         }
 
-        throw new Exception("列印 socket 失敗，已重試 3 次：" + (last == null ? "" : last.getMessage()));
+        @JavascriptInterface
+        public boolean isReady() {
+            return true;
+        }
+    }
+
+    private TextView tv(String text, int sp, int color, boolean bold) {
+        TextView v = new TextView(this);
+        v.setText(text);
+        v.setTextSize(sp);
+        v.setTextColor(color);
+        v.setPadding(0, 5, 0, 5);
+        if (bold) v.setTypeface(null, Typeface.BOLD);
+        return v;
+    }
+
+    private TextView label(String text) {
+        return tv(text, 14, Color.rgb(255, 209, 102), true);
+    }
+
+    private EditText input(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setSingleLine(true);
+        e.setTextColor(Color.BLACK);
+        e.setTextSize(18);
+        e.setBackgroundColor(Color.WHITE);
+        e.setPadding(12, 8, 12, 8);
+        return e;
+    }
+
+    private Button btn(String text, int bg) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextSize(16);
+        b.setTextColor(Color.BLACK);
+        b.setBackgroundColor(bg);
+        return b;
     }
 
     private void printText(String text) {
@@ -528,34 +209,26 @@ public class MainActivity extends Activity {
                 String content = text == null ? "" : text.replace("\r", "").trim();
                 if (content.length() == 0) content = "TEST";
 
-                final String finalContent = content;
-                final byte[] printData = buildEzplImage(finalContent);
-                final String zpl = "EZPL Q IMAGE bytes=" + printData.length;
-
+                final byte[] printData = buildEzplImage(content);
                 ui(() -> {
                     status("列印中...");
-                    log("送出內容:\n" + zpl);
+                    log("收到 POS 列印內容:\n" + content + "\n\nEZPL IMAGE bytes=" + printData.length);
                 });
 
                 sendSocket(printData);
-
-                ui(() -> status("測試列印已送出"));
+                ui(() -> status("列印已送出"));
 
             } catch (Exception ex) {
                 ui(() -> {
-                    status("測試失敗：" + ex.getMessage());
+                    status("列印失敗：" + ex.getMessage());
                     log(ex.toString());
                 });
             }
         }).start();
     }
 
-    // DX2 圖片列印方案：GoDEX EZPL 圖像不是 GW+HEX，而是 Q 指令 + 原始 bitmap bytes。
-    // 官方 EZPL Pattern command: Qx,y,width,height，後面資料長度 = width(byte) * height(dot)。
     private byte[] buildEzplImage(String text) throws Exception {
-        String content = text == null ? "TEST" : text
-                .replace("\r", "")
-                .trim();
+        String content = text == null ? "TEST" : text.replace("\r", "").trim();
         if (content.length() == 0) content = "TEST";
 
         Bitmap bmp = textToBitmap(content);
@@ -589,14 +262,8 @@ public class MainActivity extends Activity {
             }
         }
 
-        if (first.startsWith("D.")) {
-            return drinkTextToBitmap(content);
-        }
-
-        if (first.startsWith("TEL:")) {
-            return telTextToBitmap(content);
-        }
-
+        if (first.startsWith("D.")) return drinkTextToBitmap(content);
+        if (first.startsWith("TEL:")) return telTextToBitmap(content);
         return normalTextToBitmap(content);
     }
 
@@ -613,12 +280,10 @@ public class MainActivity extends Activity {
         int lineHeight = 42;
 
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
-        String[] rawLines = text == null
-                ? new String[]{"TEST"}
-                : text.replace("\r", "").split("\n");
+        String[] rawLines = text == null ? new String[]{"TEST"} : text.replace("\r", "").split("\n");
 
-        for (int i = 0; i < rawLines.length; i++) {
-            String line = rawLines[i] == null ? "" : rawLines[i].trim();
+        for (String rawLine : rawLines) {
+            String line = rawLine == null ? "" : rawLine.trim();
             if (line.length() == 0 || line.equals("---")) continue;
 
             if (line.contains("$") || line.matches("\\d{2}/\\d{2}.*")) {
@@ -648,11 +313,9 @@ public class MainActivity extends Activity {
                     left = line.substring(0, p).trim();
                     price = line.substring(p).trim();
                 }
-
                 paint.setTextSize(34);
                 paint.setFakeBoldText(true);
                 canvas.drawText(left, margin, y, paint);
-
                 if (price.length() > 0) {
                     float priceWidth = paint.measureText(price);
                     canvas.drawText(price, width - margin - priceWidth, y, paint);
@@ -663,32 +326,24 @@ public class MainActivity extends Activity {
 
             if (isTime) {
                 paint.setTextSize(18);
-                paint.setFakeBoldText(true);
             } else if (line.contains("・") || line.startsWith("+")) {
                 paint.setTextSize(26);
-                paint.setFakeBoldText(true);
             } else {
                 paint.setTextSize(34);
-                paint.setFakeBoldText(true);
             }
+            paint.setFakeBoldText(true);
 
             float textWidth = paint.measureText(line);
             float x = (width - textWidth) / 2f;
             if (x < margin) x = margin;
             if (x + textWidth > width - margin) x = width - margin - textWidth;
             if (x < margin) x = margin;
-
-            if (isTime && y < height - 22) {
-                y = Math.max(y, height - 24);
-            }
-
+            if (isTime && y < height - 22) y = Math.max(y, height - 24);
             canvas.drawText(line, x, y, paint);
             y += isTime ? 24 : lineHeight;
         }
-
         return bitmap;
     }
-
 
     private Bitmap telTextToBitmap(String text) {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -711,7 +366,6 @@ public class MainActivity extends Activity {
 
         String header = raw.get(0);
         String price = "";
-
         int p = header.lastIndexOf("$");
         if (p >= 0) {
             price = header.substring(p).trim();
@@ -722,27 +376,20 @@ public class MainActivity extends Activity {
         java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
         for (int i = 1; i < raw.size(); i++) {
             String line = raw.get(i);
-            if (line.matches("\\d{2}/\\d{2}.*")) {
-                time = line;
-            } else if (line.startsWith("$")) {
-                price = line;
-            } else if (line.contains("$")) {
+            if (line.matches("\\d{2}/\\d{2}.*")) time = line;
+            else if (line.startsWith("$")) price = line;
+            else if (line.contains("$")) {
                 int pp = line.lastIndexOf("$");
-                if (pp >= 0) {
-                    price = line.substring(pp).trim();
-                    String left = line.substring(0, pp).trim();
-                    if (left.length() > 0) itemLines.add(left);
-                }
-            } else {
-                itemLines.add(line);
-            }
+                price = line.substring(pp).trim();
+                String left = line.substring(0, pp).trim();
+                if (left.length() > 0) itemLines.add(left);
+            } else itemLines.add(line);
         }
 
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        paint.setFakeBoldText(true);
         float telSize = 34;
         paint.setTextSize(telSize);
         while (paint.measureText(header) > width - (margin * 2) && telSize > 24) {
@@ -770,18 +417,14 @@ public class MainActivity extends Activity {
 
         if (price.length() > 0) {
             paint.setTextSize(30);
-            paint.setFakeBoldText(true);
             float pw = paint.measureText(price);
             canvas.drawText(price, (width - pw) / 2f, height - 52, paint);
         }
-
         if (time.length() > 0) {
             paint.setTextSize(19);
-            paint.setFakeBoldText(true);
             float tw = paint.measureText(time);
             canvas.drawText(time, (width - tw) / 2f, height - 20, paint);
         }
-
         return bitmap;
     }
 
@@ -817,41 +460,29 @@ public class MainActivity extends Activity {
         java.util.ArrayList<String> itemLines = new java.util.ArrayList<>();
         for (int i = 1; i < raw.size(); i++) {
             String line = raw.get(i);
-            if (line.matches("\\d{2}/\\d{2}.*")) {
-                time = line;
-            } else if (line.startsWith("$")) {
-                price = line;
-            } else {
-                itemLines.add(line);
-            }
+            if (line.matches("\\d{2}/\\d{2}.*")) time = line;
+            else if (line.startsWith("$")) price = line;
+            else itemLines.add(line);
         }
 
         Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(Color.WHITE);
 
-        // 第一行：D.流水號（若有地瓜球，顯示 8號）
         paint.setTextSize(34);
-        paint.setFakeBoldText(true);
         float headWidth = paint.measureText(header);
         float headX = (width - headWidth) / 2f;
         if (headX < margin) headX = margin;
         if (headX + headWidth > width - margin) headX = width - margin - headWidth;
         canvas.drawText(header, headX, 48, paint);
 
-        // 中間品項：置中大字，最多 4 行
         int y = 96;
         for (int i = 0; i < itemLines.size() && i < 4; i++) {
             String line = itemLines.get(i);
             if (line.contains("・")) line = line.replace("・", " / ");
-
-            if (line.startsWith("+")) {
-                paint.setTextSize(28);
-            } else if (i == 0) {
-                paint.setTextSize(34);
-            } else {
-                paint.setTextSize(30);
-            }
+            if (line.startsWith("+")) paint.setTextSize(28);
+            else if (i == 0) paint.setTextSize(34);
+            else paint.setTextSize(30);
 
             java.util.ArrayList<String> wrapped = wrapText(line, paint, width - (margin * 2));
             for (String w : wrapped) {
@@ -865,29 +496,21 @@ public class MainActivity extends Activity {
             }
         }
 
-        // 底部左：時間小字
         if (time.length() > 0) {
             paint.setTextSize(19);
-            paint.setFakeBoldText(true);
             canvas.drawText(time, margin, height - 20, paint);
         }
-
-        // 底部右：價錢中字
         if (price.length() > 0) {
             paint.setTextSize(30);
-            paint.setFakeBoldText(true);
             float pw = paint.measureText(price);
             canvas.drawText(price, width - margin - pw, height - 20, paint);
         }
-
         return bitmap;
     }
 
     private String normalizeDrinkHeader(String header) {
         if (header == null) return "";
         String h = header.trim();
-
-        // D.15 (8) → D.15 (8號)
         java.util.regex.Pattern p = java.util.regex.Pattern.compile("\\((\\d+)\\)");
         java.util.regex.Matcher m = p.matcher(h);
         StringBuffer sb = new StringBuffer();
@@ -901,7 +524,6 @@ public class MainActivity extends Activity {
     private java.util.ArrayList<String> wrapText(String text, Paint paint, int maxWidth) {
         java.util.ArrayList<String> lines = new java.util.ArrayList<>();
         StringBuilder current = new StringBuilder();
-
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             String next = current.toString() + ch;
@@ -911,7 +533,6 @@ public class MainActivity extends Activity {
             }
             current.append(ch);
         }
-
         if (current.length() > 0) lines.add(current.toString());
         return lines;
     }
@@ -932,7 +553,6 @@ public class MainActivity extends Activity {
                     if (x < width) {
                         int pixel = bmp.getPixel(x, y);
                         int gray = (Color.red(pixel) + Color.green(pixel) + Color.blue(pixel)) / 3;
-                        // GoDEX Q pattern: bit=1 印黑點。
                         if (gray < 230) value |= 1;
                     }
                 }
@@ -940,16 +560,6 @@ public class MainActivity extends Activity {
             }
         }
         return out;
-    }
-
-    private String sanitizeZplText(String s) {
-        if (s == null) return "";
-        return s
-                .replace("^", "")
-                .replace("~", "")
-                .replace("\r", "")
-                .replace("\n", "")
-                .trim();
     }
 
     private void sendSocket(byte[] data) throws Exception {
@@ -967,115 +577,6 @@ public class MainActivity extends Activity {
         Thread.sleep(250);
         os.close();
         socket.close();
-    }
-
-    private String firstNonEmpty(String... values) {
-        if (values == null) return "";
-        for (String v : values) {
-            if (v != null && v.trim().length() > 0) return v.trim();
-        }
-        return "";
-    }
-
-    // 如果後端還回傳舊 EZPL，先盡量把可讀文字抽出來。
-    private String extractReadableText(String raw) {
-        if (raw == null) return "";
-        StringBuilder sb = new StringBuilder();
-        String[] lines = raw.replace("\r", "").split("\n");
-        for (String line : lines) {
-            String t = line.trim();
-            if (t.length() == 0) continue;
-            if (t.startsWith("^") || t.startsWith("~") || t.equals("E")) continue;
-            int idx = t.lastIndexOf(",");
-            if (idx >= 0 && idx < t.length() - 1) {
-                String tail = t.substring(idx + 1).replace("\"", "").trim();
-                if (tail.length() > 0) sb.append(tail).append("\n");
-            }
-        }
-        return sb.toString().trim();
-    }
-
-    private String getOrderDateText(JSONObject job) {
-        return firstNonEmpty(
-                job.optString("date", ""),
-                job.optString("orderDate", ""),
-                job.optString("createdAt", ""),
-                job.optString("created_at", ""),
-                job.optString("timestamp", ""),
-                job.optString("time", ""),
-                job.optString("datetime", ""),
-                job.optString("createdTime", "")
-        );
-    }
-
-    private boolean isTodayOrder(String dateText) {
-        if (dateText == null || dateText.trim().length() == 0) {
-            // 後端若尚未回傳日期，先放行，避免新單被誤擋。
-            return true;
-        }
-
-        String s = dateText.trim();
-        String todayDash = new SimpleDateFormat("yyyy-MM-dd", Locale.TAIWAN).format(new Date());
-        String todaySlash = new SimpleDateFormat("yyyy/MM/dd", Locale.TAIWAN).format(new Date());
-        String todaySlashNoZero = new SimpleDateFormat("yyyy/M/d", Locale.TAIWAN).format(new Date());
-        String todayMd = new SimpleDateFormat("M/d", Locale.TAIWAN).format(new Date());
-        String todayMdZero = new SimpleDateFormat("MM/dd", Locale.TAIWAN).format(new Date());
-        String todayChinese = new SimpleDateFormat("yyyy年M月d日", Locale.TAIWAN).format(new Date());
-
-        if (s.contains(todayDash)) return true;
-        if (s.contains(todaySlash)) return true;
-        if (s.contains(todaySlashNoZero)) return true;
-        if (s.contains(todayChinese)) return true;
-
-        // 避免 6/2 誤判 6/20：只有字串開頭就是月/日時才使用 M/d 判斷。
-        if (s.startsWith(todayMd + " ") || s.startsWith(todayMd + "　") || s.equals(todayMd)) return true;
-        if (s.startsWith(todayMdZero + " ") || s.startsWith(todayMdZero + "　") || s.equals(todayMdZero)) return true;
-
-        return false;
-    }
-
-    private int parseOrderNo(String s) {
-        if (s == null) return 0;
-        StringBuilder digits = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c >= '0' && c <= '9') digits.append(c);
-        }
-        if (digits.length() == 0) return 0;
-        try {
-            return Integer.parseInt(digits.toString());
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    private String httpGet(String urlText) throws Exception {
-        URL url = new URL(urlText);
-        HttpURLConnection c = (HttpURLConnection) url.openConnection();
-        c.setConnectTimeout(5000);
-        c.setReadTimeout(5000);
-        c.setRequestMethod("GET");
-        c.setInstanceFollowRedirects(true);
-
-        InputStream in = c.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
-        StringBuilder sb = new StringBuilder();
-        String line;
-        while ((line = br.readLine()) != null) sb.append(line);
-        br.close();
-        return sb.toString();
-    }
-
-    private String cleanUrl(String s) {
-        if (s == null) return "";
-        s = s.trim();
-        if (s.endsWith("?")) return s.substring(0, s.length() - 1);
-        if (s.endsWith("&")) return s.substring(0, s.length() - 1);
-        return s;
-    }
-
-    private String enc(String s) throws Exception {
-        return URLEncoder.encode(s == null ? "" : s, "UTF-8");
     }
 
     private void ui(Runnable r) {
