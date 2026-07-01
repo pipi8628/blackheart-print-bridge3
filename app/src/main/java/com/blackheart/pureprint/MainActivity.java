@@ -13,6 +13,8 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.view.ViewGroup;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -30,6 +32,7 @@ public class MainActivity extends Activity {
     private EditText webAppUrlInput, printerIpInput, portInput;
     private TextView statusText, logText;
     private Button loadBtn, reloadBtn, testBtn;
+    private Button menuBtn;
     private WebView webView;
     private LinearLayout setupPanel;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -38,6 +41,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
         buildUi();
         loadSettings();
@@ -56,24 +61,30 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        Button menuBtn = btn("☰ 設定", Color.rgb(255, 209, 102));
-        menuBtn.setTextSize(18);
-        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(150, 72);
+        menuBtn = btn("☰ 設定 V49.3", Color.rgb(255, 209, 102));
+        menuBtn.setTextSize(16);
+        menuBtn.setAllCaps(false);
+        menuBtn.setElevation(dp(30));
+        menuBtn.setTranslationZ(dp(30));
+        FrameLayout.LayoutParams menuLp = new FrameLayout.LayoutParams(dp(170), dp(62));
         menuLp.leftMargin = 14;
         menuLp.topMargin = 14;
         root.addView(menuBtn, menuLp);
+        menuBtn.bringToFront();
 
         setupPanel = new LinearLayout(this);
         setupPanel.setOrientation(LinearLayout.VERTICAL);
         setupPanel.setPadding(18, 18, 18, 18);
         setupPanel.setBackgroundColor(Color.rgb(245, 245, 245));
         setupPanel.setVisibility(View.VISIBLE);
+        setupPanel.bringToFront();
+        if (menuBtn != null) menuBtn.bringToFront();
 
         LinearLayout titleRow = new LinearLayout(this);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
 
-        TextView title = tv("設定面板 V49.2", 20, Color.BLACK, true);
+        TextView title = tv("設定面板 V49.3", 20, Color.BLACK, true);
         Button closeBtn = btn("×", Color.rgb(255, 209, 102));
         closeBtn.setTextSize(24);
         titleRow.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
@@ -123,6 +134,10 @@ public class MainActivity extends Activity {
         panelLp.leftMargin = 24;
         panelLp.topMargin = 96;
         root.addView(setupPanel, panelLp);
+        setupPanel.setElevation(dp(40));
+        setupPanel.setTranslationZ(dp(40));
+        setupPanel.bringToFront();
+        menuBtn.bringToFront();
 
         menuBtn.setOnClickListener(v -> toggleSetupPanel());
         closeBtn.setOnClickListener(v -> hideSetupPanel());
@@ -133,6 +148,10 @@ public class MainActivity extends Activity {
         testBtn.setOnClickListener(v -> printText("黑心地瓜球\n測試列印\n$60"));
 
         setContentView(root);
+        root.post(() -> {
+            if (setupPanel != null) setupPanel.bringToFront();
+            if (menuBtn != null) menuBtn.bringToFront();
+        });
     }
 
     private int dp(int value) {
@@ -151,10 +170,13 @@ public class MainActivity extends Activity {
 
     private void hideSetupPanel() {
         if (setupPanel != null) setupPanel.setVisibility(View.GONE);
+        if (menuBtn != null) menuBtn.bringToFront();
     }
 
     private void showSetupPanel() {
         if (setupPanel != null) setupPanel.setVisibility(View.VISIBLE);
+        setupPanel.bringToFront();
+        if (menuBtn != null) menuBtn.bringToFront();
     }
 
     private void setupWebView() {
@@ -180,6 +202,8 @@ public class MainActivity extends Activity {
                 status("POS 已載入｜AndroidPrinter 已注入");
                 // 讓前端偵錯更明顯：頁面載入後在 console/全域標記橋接存在
                 view.evaluateJavascript("window.__ANDROID_PRINTER_READY__ = !!window.AndroidPrinter; console.log('AndroidPrinter ready:', !!window.AndroidPrinter);", null);
+                if (menuBtn != null) menuBtn.bringToFront();
+                if (setupPanel != null && setupPanel.getVisibility() == View.VISIBLE) setupPanel.bringToFront();
                 hideSetupPanel();
             }
         });
