@@ -31,6 +31,7 @@ public class MainActivity extends Activity {
     private TextView statusText, logText;
     private Button loadBtn, reloadBtn, testBtn;
     private WebView webView;
+    private LinearLayout setupPanel;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private SharedPreferences prefs;
 
@@ -48,25 +49,31 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(14, 14, 14, 14);
+        root.setPadding(0, 0, 0, 0);
         root.setBackgroundColor(Color.rgb(17, 17, 17));
 
-        root.addView(tv("🍠 BlackHeart POS WebView Bridge｜GoDEX DX2", 22, Color.WHITE, true));
+        setupPanel = new LinearLayout(this);
+        setupPanel.setOrientation(LinearLayout.VERTICAL);
+        setupPanel.setPadding(14, 14, 14, 14);
+        setupPanel.setBackgroundColor(Color.rgb(17, 17, 17));
+
+        TextView title = tv("🍠 BlackHeart POS｜長按 POS 畫面叫出設定", 22, Color.WHITE, true);
+        setupPanel.addView(title);
 
         statusText = tv("尚未載入 POS", 17, Color.rgb(255, 209, 102), true);
-        root.addView(statusText);
+        setupPanel.addView(statusText);
 
-        root.addView(label("POS Web App 網址"));
+        setupPanel.addView(label("POS Web App 網址"));
         webAppUrlInput = input("https://script.google.com/macros/s/XXXX/exec");
-        root.addView(webAppUrlInput);
+        setupPanel.addView(webAppUrlInput);
 
-        root.addView(label("GoDEX IP"));
+        setupPanel.addView(label("GoDEX IP"));
         printerIpInput = input("192.168.31.189");
-        root.addView(printerIpInput);
+        setupPanel.addView(printerIpInput);
 
-        root.addView(label("Port"));
+        setupPanel.addView(label("Port"));
         portInput = input("9100");
-        root.addView(portInput);
+        setupPanel.addView(portInput);
 
         LinearLayout btnRow = new LinearLayout(this);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -78,12 +85,17 @@ public class MainActivity extends Activity {
         btnRow.addView(loadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         btnRow.addView(reloadBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
         btnRow.addView(testBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        root.addView(btnRow);
+        setupPanel.addView(btnRow);
 
         logText = tv("", 12, Color.WHITE, false);
         logText.setBackgroundColor(Color.rgb(43, 43, 43));
         logText.setPadding(12, 8, 12, 8);
-        root.addView(logText, new LinearLayout.LayoutParams(
+        setupPanel.addView(logText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                110
+        ));
+
+        root.addView(setupPanel, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
         ));
@@ -101,7 +113,22 @@ public class MainActivity extends Activity {
         });
         testBtn.setOnClickListener(v -> printText("黑心地瓜球\n測試列印\n$60"));
 
+        // 營業模式下若要改網址/IP：長按 POS 畫面叫回設定面板。
+        webView.setOnLongClickListener(v -> {
+            showSetupPanel();
+            Toast.makeText(MainActivity.this, "已顯示設定面板", Toast.LENGTH_SHORT).show();
+            return true;
+        });
+
         setContentView(root);
+    }
+
+    private void hideSetupPanel() {
+        if (setupPanel != null) setupPanel.setVisibility(View.GONE);
+    }
+
+    private void showSetupPanel() {
+        if (setupPanel != null) setupPanel.setVisibility(View.VISIBLE);
     }
 
     private void setupWebView() {
@@ -127,6 +154,7 @@ public class MainActivity extends Activity {
                 status("POS 已載入｜AndroidPrinter 已注入");
                 // 讓前端偵錯更明顯：頁面載入後在 console/全域標記橋接存在
                 view.evaluateJavascript("window.__ANDROID_PRINTER_READY__ = !!window.AndroidPrinter; console.log('AndroidPrinter ready:', !!window.AndroidPrinter);", null);
+                hideSetupPanel();
             }
         });
     }
@@ -206,16 +234,15 @@ public class MainActivity extends Activity {
         saveSettings();
         new Thread(() -> {
             try {
-               String content = text == null ? "" : text.replace("\r", "").trim();
-if (content.length() == 0) content = "TEST";
+                String content = text == null ? "" : text.replace("\r", "").trim();
+                if (content.length() == 0) content = "TEST";
 
-final String finalContent = content;
-final byte[] printData = buildEzplImage(finalContent);
-
-ui(() -> {
-    status("列印中...");
-    log("收到 POS 列印內容:\n" + finalContent + "\n\nEZPL IMAGE bytes=" + printData.length);
-});
+                final String finalContent = content;
+                final byte[] printData = buildEzplImage(finalContent);
+                ui(() -> {
+                    status("列印中...");
+                    log("收到 POS 列印內容:\n" + finalContent + "\n\nEZPL IMAGE bytes=" + printData.length);
+                });
 
                 sendSocket(printData);
                 ui(() -> status("列印已送出"));
@@ -591,6 +618,6 @@ ui(() -> {
     }
 
     private void log(String s) {
-        logText.setText(s + "\n\n" + logText.getText().toString());
+        if (logText != null) logText.setText(s == null ? "" : s);
     }
 }
